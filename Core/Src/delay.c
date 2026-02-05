@@ -3,15 +3,13 @@
 
 volatile uint32_t system_tick = 0;
 
-// Обработчик SysTick
 void SysTick_Handler(void)
 {
     system_tick++;
 
-    // Вызов обработчика демпфирования каждые 10 мс
     if ( (system_tick % 10) == 0 ) 
     {
-        buttons_debounce_handler();
+        buttons_debounce_handler();  // вызов обработчика демпфирования каждые 10 мс
     }
 }
 
@@ -28,13 +26,13 @@ void delay_init(uint32_t frequency_khz)
     // 84,000,000 / 1000 = 84,000
     // LOAD = 84,000 - 1 = 83,999
 
-    uint32_t reload_value = (frequency_khz) - 1;
+    uint32_t reload_value = (frequency_khz) - 1; // 84000 - 1 = 83999
     
     if (reload_value > 0xFFFFFF) {
-        reload_value = 0xFFFFFF;  // Максимальное значение
+        reload_value = 0xFFFFFF;  // максимальное значение
     }
     
-    SysTick->LOAD = reload_value; // ПРАВИЛЬНО: 84000 - 1 = 83999
+    SysTick->LOAD = reload_value;
     SysTick->VAL = 0;
     SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
     

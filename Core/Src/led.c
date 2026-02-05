@@ -7,28 +7,28 @@ void leds_init(void)
 {
     // Включить тактирование порта E (не сбрасывая другие биты!)
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
-    
+
     // LED1 (PE13)
     GPIOE->MODER &= ~(GPIO_MODER_MODER13);           // сбросить режим
     GPIOE->MODER |= GPIO_MODER_MODER13_0;            // установить вывод (01)
     GPIOE->OTYPER &= ~(GPIO_OTYPER_OT_13);           // push-pull (0)
     GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR13);    // низкая скорость
     GPIOE->PUPDR &= ~(GPIO_PUPDR_PUPDR13);           // без подтяжки
-    
+
     // LED2 (PE14)
     GPIOE->MODER &= ~(GPIO_MODER_MODER14);
     GPIOE->MODER |= GPIO_MODER_MODER14_0;
     GPIOE->OTYPER &= ~(GPIO_OTYPER_OT_14);
     GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR14);
     GPIOE->PUPDR &= ~(GPIO_PUPDR_PUPDR14);
-    
+
     // LED3 (PE15)
     GPIOE->MODER &= ~(GPIO_MODER_MODER15);
     GPIOE->MODER |= GPIO_MODER_MODER15_0;
     GPIOE->OTYPER &= ~(GPIO_OTYPER_OT_15);
     GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR15);
     GPIOE->PUPDR &= ~(GPIO_PUPDR_PUPDR15);
-    
+
     // Выключить все светодиоды (0 = включено, 1 = выключено)
     GPIOE->BSRR = GPIO_BSRR_BS_13 | GPIO_BSRR_BS_14 | GPIO_BSRR_BS_15;
 }

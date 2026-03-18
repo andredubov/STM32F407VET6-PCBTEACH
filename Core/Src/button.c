@@ -3,17 +3,16 @@
 #include "delay.h"
 
 // Константы для демпфирования
-#define DEBOUNCE_TIME_MS     50     // время демпфирования в мс
-#define DEBOUNCE_COUNTER_MAX 5      // количество проверок для подтверждения состояния
-                                    // (при вызове обработчика каждые 10 мс = 50 мс)
+#define DEBOUNCE_COUNTER_MAX 1      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
 
-volatile ButtonEvent_t button_event = NONE;
-volatile ButtonDebounce_t button_debounce = {0};
+volatile button_event_t button_event = NONE;
+volatile button_debounce_t button_debounce = {0};
 volatile uint8_t button_raw_state[3] = {0};  // сырое состояние из прерывания
+volatile uint32_t pin_state = 0;
 
-ButtonEvent_t get_button_event(void)
+button_event_t get_button_event(void)
 {
-    ButtonEvent_t event = button_event;
+    button_event_t event = button_event;
     button_event = NONE; // Сбрасываем событие после чтения
     return event;
 }
@@ -21,27 +20,23 @@ ButtonEvent_t get_button_event(void)
 // Обработчик прерывания - только фиксирует сырое состояние
 void EXTI15_10_IRQHandler(void)
 {
-    uint32_t pin_state = GPIOE->IDR;
+    pin_state = GPIOE->IDR;
 
     if (EXTI->PR & EXTI_PR_PR10) {
-        if ( !(pin_state & GPIO_IDR_ID10) ) { // Проверяем, что действительно переход 1->0 (pin должен быть 0)
-            button_raw_state[0] = 1; // Фиксируем нажатие кнопки 1
+        if ( !(pin_state & GPIO_IDR_ID10) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
+            button_raw_state[0] = 1;            // Фиксируем нажатие кнопки 1
         }
-        EXTI->PR = EXTI_PR_PR10; // Сбросить флаг прерывания
-    }
-
-    if (EXTI->PR & EXTI_PR_PR11) {
-        if ( !(pin_state & GPIO_IDR_ID11) ) {
-            button_raw_state[1] = 1;    // Фиксируем нажатие кнопки 2
+        EXTI->PR = EXTI_PR_PR10;                // Сбросить флаг прерывания
+    } else if (EXTI->PR & EXTI_PR_PR11) {       
+        if ( !(pin_state & GPIO_IDR_ID11) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
+            button_raw_state[1] = 1;            // Фиксируем нажатие кнопки 2
         }
-        EXTI->PR = EXTI_PR_PR11;
-    }
-
-    if (EXTI->PR & EXTI_PR_PR12) {
-        if ( !(pin_state & GPIO_IDR_ID12) ) {
-            button_raw_state[2] = 1;    // Фиксируем нажатие кнопки 3
+        EXTI->PR = EXTI_PR_PR11;                // Сбросить флаг прерывания
+    } else if (EXTI->PR & EXTI_PR_PR12) {
+        if ( !(pin_state & GPIO_IDR_ID12) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
+            button_raw_state[2] = 1;            // Фиксируем нажатие кнопки 3
         }
-        EXTI->PR = EXTI_PR_PR12;
+        EXTI->PR = EXTI_PR_PR12;                // Сбросить флаг прерывания
     }
 }
 
@@ -59,7 +54,6 @@ void buttons_debounce_handler(void)
                     if (!button_debounce.button_state[i]) {
                         button_debounce.button_state[i] = 1;
                         button_debounce.button_pressed_flag[i] = 1;
-
                         // Генерируем событие
                         switch (i) {
                             case 0: button_event = BUTTON_1_PRESSED; break;
@@ -69,7 +63,6 @@ void buttons_debounce_handler(void)
                     }
                 }
             }
-
             button_raw_state[i] = 0; // Сброс сырого состояния для следующей проверки
         } else {
             // Кнопка не активна (отпущена)
@@ -117,7 +110,7 @@ void buttons_init(void)
 
     // 7. Настроить триггер по фронту (falling edge, 1->0)
     EXTI->FTSR = (EXTI_FTSR_TR10 | EXTI_FTSR_TR11 | EXTI_FTSR_TR12);
-    EXTI->RTSR = 0; // &= ~(EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
+    EXTI->RTSR = 0; //&= ~(EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 
     // 8. Настроить NVIC
     NVIC_SetPriority(EXTI15_10_IRQn, 0x0E);  // Средний приоритет

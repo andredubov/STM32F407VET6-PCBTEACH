@@ -6,9 +6,8 @@
 
 // Внутренние переменные
 static bool is_initialized = false;
-static UartBaudrate_t current_baudrate = UART_BAUDRATE_115200;
-
-volatile static CommandId_t command_id = TURN_ALL_LEDS_OFF;
+static uart_baudrate_t current_baudrate = UART_BAUDRATE_115200;
+volatile static command_id_t command_id = TURN_ALL_LEDS_OFF;
 
 void uart_init(void)
 {
@@ -28,17 +27,20 @@ void uart_init(void)
     GPIOA->AFR[1] |= (7 << GPIO_AFRH_AFSEL9_Pos) | (7 << GPIO_AFRH_AFSEL10_Pos);
     
     // 3. Настроить USART
-    USART1->CR1 &= ~USART_CR1_UE;  // Отключить USART для настройки
+    USART1->CR1 &= ~(USART_CR1_UE);  // Отключить USART для настройки
     
     // Установка скорости по умолчанию
-    uart_set_baudrate(current_baudrate);
+    uart_error_t result = uart_set_baudrate(current_baudrate);
+    if (UART_ERROR_PARAM == result) {
+        return;
+    }
     
-    USART1->CR1 = USART_CR1_TE | USART_CR1_RE;  // Вкл. передатчик и приемник
-    USART1->CR1 &= ~(USART_CR1_M | USART_CR1_PCE);  // 8 бит, без четности
-    USART1->CR2 = 0;  // 1 стоповый бит
+    USART1->CR1 |= USART_CR1_TE | USART_CR1_RE;     // Вкл. передатчик и приемник
+    USART1->CR1 &= ~(USART_CR1_M | USART_CR1_PCE);  // 8 бит, без контроля четности
+    USART1->CR2 &= ~(USART_CR2_STOP);               // 1 стоповый бит
     
     // 4. Включить прерывания (если нужно)
-    USART1->CR1 |= USART_CR1_RXNEIE;  // Прерывание по приему
+    USART1->CR1 |= USART_CR1_RXNEIE;                // Прерывание по приему
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 0);
     
@@ -48,7 +50,7 @@ void uart_init(void)
     is_initialized = true;
 }
 
-UartError_t uart_set_baudrate(UartBaudrate_t baudrate)
+uart_error_t uart_set_baudrate(uart_baudrate_t baudrate)
 {
     if (baudrate < 9600 || baudrate > 3000000) {
         return UART_ERROR_PARAM;
@@ -60,13 +62,15 @@ UartError_t uart_set_baudrate(UartBaudrate_t baudrate)
     if (is_initialized) {
         // Отключить USART перед изменением BRR
         USART1->CR1 &= ~USART_CR1_UE;
-        
         // Рассчитать BRR (округление к ближайшему)
         uint32_t brr_value = (APB2_FREQUENCY + baudrate/2) / baudrate;
         USART1->BRR = brr_value;
-        
         // Включить USART обратно
         USART1->CR1 |= USART_CR1_UE;
+    } else {
+        // Рассчитать BRR (округление к ближайшему)
+        uint32_t brr_value = (APB2_FREQUENCY + baudrate/2) / baudrate;
+        USART1->BRR = brr_value;
     }
     
     return UART_OK;
@@ -80,7 +84,7 @@ void uart_send_byte(uint8_t byte)
     USART1->DR = byte;
 }
 
-UartError_t uart_send_data(const uint8_t* data, uint32_t size)
+uart_error_t uart_send_data(const uint8_t* data, uint32_t size)
 {
     if (!data || size == 0) {
         return UART_ERROR_PARAM;
@@ -105,7 +109,7 @@ UartError_t uart_send_data(const uint8_t* data, uint32_t size)
     {
         if (--timeout == 0) {
             return UART_ERROR_TIMEOUT;
-        }  
+        }
     }
     
     return UART_OK;
@@ -129,7 +133,7 @@ bool uart_is_data_received(void)
 }
 
 // Функция для получения текущей скорости
-UartBaudrate_t uart_get_current_baudrate(void)
+uart_baudrate_t uart_get_current_baudrate(void)
 {
     return current_baudrate;
 }
@@ -158,7 +162,7 @@ void USART1_IRQHandler(void)
     }
 }
 
-CommandId_t get_command_id(void)
+command_id_t get_command_id(void)
 {
     return command_id;
 }

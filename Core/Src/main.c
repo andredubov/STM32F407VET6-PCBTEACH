@@ -14,7 +14,7 @@ int main(void)
 
     for (;;)
     {
-        ButtonEvent_t event = get_button_event();        
+        button_event_t event = get_button_event();
 
         switch (event)
         {
@@ -31,7 +31,7 @@ int main(void)
                 break;
         }
 
-        CommandId_t command_id = get_command_id();
+        command_id_t command_id = get_command_id();
 
         switch (command_id)
         {

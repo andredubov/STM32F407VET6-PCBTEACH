@@ -1,13 +1,13 @@
 #include "stm32f407xx.h"
 #include "button.h"
 
-volatile uint32_t system_tick = 0;
+volatile uint32_t system_tick = 1;
 
 void SysTick_Handler(void)
 {
     system_tick++;
 
-    if ( (system_tick % 10) == 0 ) 
+    if ( (system_tick % DEBOUNCE_TIME_MS) == 0)
     {
         buttons_debounce_handler();  // вызов обработчика демпфирования каждые 10 мс
     }

@@ -19,13 +19,13 @@ int main(void)
         switch (event)
         {
             case BUTTON_1_PRESSED:
-                uart_send_byte(1);
+                uart_send_byte('1');
                 break;
             case BUTTON_2_PRESSED:
-                uart_send_byte(2);
+                uart_send_byte('2');
                 break;
             case BUTTON_3_PRESSED:
-                uart_send_byte(3);
+                uart_send_byte('3');
                 break;
             default:
                 break;

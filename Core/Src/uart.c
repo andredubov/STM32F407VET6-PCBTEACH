@@ -1,3 +1,8 @@
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include "button.h"
 #include "stm32f407xx.h"
 #include "uart.h"
 
@@ -8,6 +13,9 @@
 static bool is_initialized = false;
 static uart_baudrate_t current_baudrate = UART_BAUDRATE_115200;
 volatile static command_id_t command_id = TURN_ALL_LEDS_OFF;
+
+// Буфер для форматированного вывода
+static char print_buffer[128];
 
 void uart_init(void)
 {
@@ -90,7 +98,7 @@ uart_error_t uart_send_data(const uint8_t* data, uint32_t size)
         return UART_ERROR_PARAM;
     }
 
-    for (uint32_t i = 0; i < size; i++) 
+    for (uint32_t i = 0; i < size; i++)
     {
         // Проверка таймаута (защита от зависания)
         uint32_t timeout = 1000000;
@@ -100,12 +108,13 @@ uart_error_t uart_send_data(const uint8_t* data, uint32_t size)
                 return UART_ERROR_TIMEOUT;
             }
         }
+
         USART1->DR = data[i];
     }
 
     // Ждем завершения передачи последнего байта
     uint32_t timeout = 1000000;
-    while ( !(USART1->SR & USART_SR_TC) ) 
+    while ( !(USART1->SR & USART_SR_TC) )
     {
         if (--timeout == 0) {
             return UART_ERROR_TIMEOUT;
@@ -115,6 +124,83 @@ uart_error_t uart_send_data(const uint8_t* data, uint32_t size)
     return UART_OK;
 }
 
+uart_error_t uart_send_string(const char* str)
+{
+    if (!str) {
+        return UART_ERROR_PARAM;
+    }
+
+    return uart_send_data((const uint8_t*)str, strlen(str));
+}
+
+uart_error_t uart_send_line(const char* str)
+{
+    if (!str) {
+        return UART_ERROR_PARAM;
+    }
+
+    uart_error_t result;
+    
+    // Отправляем основную строку
+    result = uart_send_data((const uint8_t*)str, strlen(str));
+    if (result != UART_OK) {
+        return result;
+    }
+    
+    // Отправляем перевод строки (CR+LF)
+    result = uart_send_data((const uint8_t*)"\r\n", 2);
+    
+    return result;
+}
+
+uart_error_t uart_printf(const char* format, ...)
+{
+    va_list args;
+    int length;
+    
+    // Форматируем строку во временный буфер
+    va_start(args, format);
+    length = vsnprintf(print_buffer, sizeof(print_buffer), format, args);
+    va_end(args);
+    
+    // Проверяем на ошибки форматирования
+    if (length < 0) {
+        return UART_ERROR_PARAM;
+    }
+    
+    // Если строка слишком длинная, обрезаем
+    if (length >= sizeof(print_buffer)) {
+        print_buffer[sizeof(print_buffer) - 1] = '\0';
+    }
+    
+    // Отправляем через UART
+    return uart_send_string(print_buffer);
+}
+
+uart_error_t uart_printf_line(const char* format, ...)
+{
+    va_list args;
+    int length;
+    
+    // Форматируем строку во временный буфер
+    va_start(args, format);
+    length = vsnprintf(print_buffer, sizeof(print_buffer), format, args);
+    va_end(args);
+    
+    // Проверяем на ошибки форматирования
+    if (length < 0) {
+        return UART_ERROR_PARAM;
+    }
+    
+    // Если строка слишком длинная, обрезаем
+    if (length >= sizeof(print_buffer)) {
+        print_buffer[sizeof(print_buffer) - 1] = '\0';
+    }
+    
+    // Отправляем строку с переводом строки
+    return uart_send_line(print_buffer);
+}
+
 bool uart_is_ready_to_send(void)
 {
     return (USART1->SR & USART_SR_TXE) != 0;
@@ -122,7 +208,7 @@ bool uart_is_ready_to_send(void)
 
 uint8_t uart_receive_byte(void)
 {
-    while (!(USART1->SR & USART_SR_RXNE));
+    while ( !(USART1->SR & USART_SR_RXNE) );
 
     return (uint8_t)(USART1->DR & 0xFF);
 }
@@ -141,22 +227,25 @@ uart_baudrate_t uart_get_current_baudrate(void)
 // Обработчик прерывания USART1
 void USART1_IRQHandler(void)
 {
-    if (USART1->SR & USART_SR_RXNE) 
+    if (0 != (USART1->SR & USART_SR_RXNE))
     {
-        uint8_t received_data = (uint8_t) (USART1->DR & 0xFF);
+        uint16_t received_data = (uint16_t) (USART1->DR & (uint16_t)0x1FF);
 
         switch (received_data) {
-            case 1:
+            case '0':
+                command_id = TURN_ALL_LEDS_OFF;
+                break;
+            case '1':
                 command_id = TURN_LED_1_ON;
                 break;
-            case 2:
+            case '2':
                 command_id = TURN_LED_2_ON;
                 break;
-            case 3:
+            case '3':
                 command_id = TURN_LED_3_ON;
                 break;
             default:
-                command_id = TURN_ALL_LEDS_OFF;
+                command_id = NONE;
                 break;
         }
     }
@@ -164,5 +253,7 @@ void USART1_IRQHandler(void)
 
 command_id_t get_command_id(void)
 {
-    return command_id;
+    command_id_t cmd = command_id;
+    command_id = NONE;  // Сброс после чтения
+    return cmd;
 }

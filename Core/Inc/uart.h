@@ -5,10 +5,10 @@
 #include <stdbool.h>
 
 typedef enum {
-    TURN_ALL_LEDS_OFF = 0,
-    TURN_LED_1_ON,
-    TURN_LED_2_ON,
-    TURN_LED_3_ON
+    TURN_ALL_LEDS_OFF = '0',
+    TURN_LED_1_ON = '1',
+    TURN_LED_2_ON = '2',
+    TURN_LED_3_ON = '3'
 } command_id_t;
 
 // Enum для стандартных скоростей UART
@@ -34,17 +34,23 @@ typedef enum {
     UART_ERROR_PARAM
 } uart_error_t;
 
-void uart_init();
+// Основные функции
+void uart_init(void);
 uart_error_t uart_set_baudrate(uart_baudrate_t baudrate);
 uart_baudrate_t uart_get_current_baudrate(void);
+
+// Функции отправки
 void uart_send_byte(uint8_t byte);
 uart_error_t uart_send_data(const uint8_t* data, uint32_t size);
+uart_error_t uart_send_string(const char* str);
+uart_error_t uart_send_line(const char* str);
+uart_error_t uart_printf(const char* format, ...);
+uart_error_t uart_printf_line(const char* format, ...);
 bool uart_is_ready_to_send(void);
+
+// Функции приема
 uint8_t uart_receive_byte(void);
 bool uart_is_data_received(void);
-uint32_t get_apb2_frequency(void);  // Для отладки
-
 command_id_t get_command_id(void);
-
 
 #endif // UART_H

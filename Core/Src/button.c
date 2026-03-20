@@ -8,7 +8,6 @@
 volatile button_event_t button_event = NONE;
 volatile button_debounce_t button_debounce = {0};
 volatile uint8_t button_raw_state[3] = {0};  // сырое состояние из прерывания
-volatile uint32_t pin_state = 0;
 
 button_event_t get_button_event(void)
 {
@@ -20,24 +19,21 @@ button_event_t get_button_event(void)
 // Обработчик прерывания - только фиксирует сырое состояние
 void EXTI15_10_IRQHandler(void)
 {
-    pin_state = GPIOE->IDR;
+    uint32_t pr = EXTI->PR;
 
-    if (EXTI->PR & EXTI_PR_PR10) {
-        if ( !(pin_state & GPIO_IDR_ID10) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
-            button_raw_state[0] = 1;            // Фиксируем нажатие кнопки 1
-        }
-        EXTI->PR = EXTI_PR_PR10;                // Сбросить флаг прерывания
-    } else if (EXTI->PR & EXTI_PR_PR11) {       
-        if ( !(pin_state & GPIO_IDR_ID11) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
-            button_raw_state[1] = 1;            // Фиксируем нажатие кнопки 2
-        }
-        EXTI->PR = EXTI_PR_PR11;                // Сбросить флаг прерывания
-    } else if (EXTI->PR & EXTI_PR_PR12) {
-        if ( !(pin_state & GPIO_IDR_ID12) ) {   // Проверяем, что действительно переход 1->0 (pin должен быть 0)
-            button_raw_state[2] = 1;            // Фиксируем нажатие кнопки 3
-        }
-        EXTI->PR = EXTI_PR_PR12;                // Сбросить флаг прерывания
+    if (pr & EXTI_PR_PR10) {
+        button_raw_state[0] = 1;     // Фиксируем нажатие кнопки 1
     }
+    
+    if (pr & EXTI_PR_PR11) {       
+        button_raw_state[1] = 1;     // Фиксируем нажатие кнопки 2
+    } 
+    
+    if (pr & EXTI_PR_PR12) {
+        button_raw_state[2] = 1;     // Фиксируем нажатие кнопки 3
+    }
+
+    EXTI->PR = pr;                   // Сбросить флаг прерывания
 }
 
 // Обработчик демпфирования - вызывать периодически (например, каждые 10 мс из таймера)
@@ -92,13 +88,13 @@ void buttons_init(void)
     // 4. Включить тактирование SysCfg
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
-    // 5. Настроить EXTI линии (ИСПРАВЛЕНО)
+    // 5. Настроить EXTI линии
     // Для PE10 (EXTI10)
-    SYSCFG->EXTICR[2] &= ~SYSCFG_EXTICR3_EXTI10;
+    SYSCFG->EXTICR[2] &= ~(SYSCFG_EXTICR3_EXTI10);
     SYSCFG->EXTICR[2] |= SYSCFG_EXTICR3_EXTI10_PE;
 
     // Для PE11 (EXTI11)
-    SYSCFG->EXTICR[2] &= ~SYSCFG_EXTICR3_EXTI11;
+    SYSCFG->EXTICR[2] &= ~(SYSCFG_EXTICR3_EXTI11);
     SYSCFG->EXTICR[2] |= SYSCFG_EXTICR3_EXTI11_PE;
 
     // Для PE12 (EXTI12)
@@ -110,7 +106,7 @@ void buttons_init(void)
 
     // 7. Настроить триггер по фронту (falling edge, 1->0)
     EXTI->FTSR = (EXTI_FTSR_TR10 | EXTI_FTSR_TR11 | EXTI_FTSR_TR12);
-    EXTI->RTSR = 0; //&= ~(EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
+    EXTI->RTSR &= ~(EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 
     // 8. Настроить NVIC
     NVIC_SetPriority(EXTI15_10_IRQn, 0x0E);  // Средний приоритет

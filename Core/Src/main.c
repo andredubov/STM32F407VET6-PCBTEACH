@@ -1,4 +1,6 @@
 #include "main.h"
+#include "uart.h"
+#include <stdio.h>
 
 int main(void)
 {
@@ -19,13 +21,13 @@ int main(void)
         switch (event)
         {
             case BUTTON_1_PRESSED:
-                uart_send_byte('1');
+                uart_send_line("Button S1");
                 break;
             case BUTTON_2_PRESSED:
-                uart_send_byte('2');
+                uart_send_line("Button S2");
                 break;
             case BUTTON_3_PRESSED:
-                uart_send_byte('3');
+                uart_send_line("Button S3");
                 break;
             default:
                 break;
@@ -36,18 +38,20 @@ int main(void)
         switch (command_id)
         {
             case TURN_LED_1_ON:
-                led_on( LED_1);
+                led_on(LED_1);
                 break;
             case TURN_LED_2_ON:
-                led_on( LED_2);
+                led_on(LED_2);
                 break;
             case TURN_LED_3_ON:
-                led_on( LED_3);
+                led_on(LED_3);
+                break;
+            case TURN_ALL_LEDS_OFF:
+                led_off(LED_1);
+                led_off(LED_2);
+                led_off(LED_3);
                 break;
             default:
-                led_off( LED_1);
-                led_off( LED_2);
-                led_off( LED_3);
                 break;
         }
     }

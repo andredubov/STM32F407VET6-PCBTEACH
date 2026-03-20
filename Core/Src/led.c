@@ -33,7 +33,7 @@ void leds_init(void)
     GPIOE->BSRR = GPIO_BSRR_BS_13 | GPIO_BSRR_BS_14 | GPIO_BSRR_BS_15;
 }
 
-void led_toggle(LED_id_t led_id) 
+void led_toggle(led_id_t led_id) 
 {
     switch (led_id)
     {
@@ -49,7 +49,7 @@ void led_toggle(LED_id_t led_id)
     }
 }
 
-void led_on(LED_id_t led_id) 
+void led_on(led_id_t led_id) 
 {
     switch (led_id)
     {
@@ -65,7 +65,7 @@ void led_on(LED_id_t led_id)
     }
 }
 
-void led_off(LED_id_t led_id) 
+void led_off(led_id_t led_id) 
 {
     switch (led_id)
     {

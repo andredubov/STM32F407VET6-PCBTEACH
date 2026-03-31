@@ -61,7 +61,7 @@ void buttons_debounce_handler(void)
                         }
                     }
                 }
-            }      
+            }
         } else {
             // Кнопка не активна (отпущена)
             button_debounce.debounce_counter[i] = 0;
@@ -101,7 +101,7 @@ void buttons_init(void)
     // 6. Настроить маску прерываний
     EXTI->IMR = (EXTI_IMR_MR10 | EXTI_IMR_MR11 | EXTI_IMR_MR12);
 
-    // 7. Настроить триггер по фронту (falling edge, 1->0)
+    // 7. Настроить триггер по фронту и срезу (falling edge 1->0 and rasing edge 0->1)
     EXTI->FTSR |= (EXTI_FTSR_TR10 | EXTI_FTSR_TR11 | EXTI_FTSR_TR12);
     EXTI->RTSR |= (EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 

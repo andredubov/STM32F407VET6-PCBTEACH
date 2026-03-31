@@ -1,7 +1,7 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
-#define DEBOUNCE_TIME_MS     50     // время демпфирования в мс
+#define DEBOUNCE_TIME_MS     10     // время демпфирования в мс
 
 #include <stdint.h>
 

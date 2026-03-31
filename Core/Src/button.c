@@ -3,7 +3,7 @@
 #include "delay.h"
 
 // Константы для демпфирования
-#define DEBOUNCE_COUNTER_MAX 1      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
+#define DEBOUNCE_COUNTER_MAX 5      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
 
 volatile button_event_t button_event = NONE;
 volatile button_debounce_t button_debounce = {0};
@@ -22,18 +22,20 @@ void EXTI15_10_IRQHandler(void)
     uint32_t pr = EXTI->PR;
 
     if (pr & EXTI_PR_PR10) {
-        button_raw_state[0] = 1;     // Фиксируем нажатие кнопки 1
+        // Читаем реальное состояние пина
+        button_raw_state[0] = !(GPIOE->IDR & GPIO_IDR_IDR_10);
+        EXTI->PR = EXTI_PR_PR10;
     }
     
-    if (pr & EXTI_PR_PR11) {       
-        button_raw_state[1] = 1;     // Фиксируем нажатие кнопки 2
-    } 
+    if (pr & EXTI_PR_PR11) {
+        button_raw_state[1] = !(GPIOE->IDR & GPIO_IDR_IDR_11);
+        EXTI->PR = EXTI_PR_PR11;
+    }
     
     if (pr & EXTI_PR_PR12) {
-        button_raw_state[2] = 1;     // Фиксируем нажатие кнопки 3
+        button_raw_state[2] = !(GPIOE->IDR & GPIO_IDR_IDR_12);
+        EXTI->PR = EXTI_PR_PR12;
     }
-
-    EXTI->PR = pr;                   // Сбросить флаг прерывания
 }
 
 // Обработчик демпфирования - вызывать периодически (например, каждые 10 мс из таймера)
@@ -42,7 +44,6 @@ void buttons_debounce_handler(void)
     for (int i = 0; i < 3; i++) {
         // Проверяем сырое состояние из прерывания
         if (button_raw_state[i]) {
-            // Кнопка активна (нажата)
             if (button_debounce.debounce_counter[i] < DEBOUNCE_COUNTER_MAX) {
                 button_debounce.debounce_counter[i]++;
                 if (button_debounce.debounce_counter[i] >= DEBOUNCE_COUNTER_MAX) {
@@ -55,20 +56,16 @@ void buttons_debounce_handler(void)
                             case 0: button_event = BUTTON_1_PRESSED; break;
                             case 1: button_event = BUTTON_2_PRESSED; break;
                             case 2: button_event = BUTTON_3_PRESSED; break;
+                            default:
+                                break;
                         }
                     }
                 }
-            }
-            button_raw_state[i] = 0; // Сброс сырого состояния для следующей проверки
+            }      
         } else {
             // Кнопка не активна (отпущена)
-            if (button_debounce.debounce_counter[i] > 0) {
-                button_debounce.debounce_counter[i]--;
-                if (button_debounce.debounce_counter[i] == 0) {
-                    // Подтверждено отпускание
-                    button_debounce.button_state[i] = 0;
-                }
-            }
+            button_debounce.debounce_counter[i] = 0;
+            button_debounce.button_state[i] = 0;
         }
     }
 }
@@ -105,8 +102,8 @@ void buttons_init(void)
     EXTI->IMR = (EXTI_IMR_MR10 | EXTI_IMR_MR11 | EXTI_IMR_MR12);
 
     // 7. Настроить триггер по фронту (falling edge, 1->0)
-    EXTI->FTSR = (EXTI_FTSR_TR10 | EXTI_FTSR_TR11 | EXTI_FTSR_TR12);
-    EXTI->RTSR &= ~(EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
+    EXTI->FTSR |= (EXTI_FTSR_TR10 | EXTI_FTSR_TR11 | EXTI_FTSR_TR12);
+    EXTI->RTSR |= (EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 
     // 8. Настроить NVIC
     NVIC_SetPriority(EXTI15_10_IRQn, 0x0E);  // Средний приоритет

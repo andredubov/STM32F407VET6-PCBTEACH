@@ -50,7 +50,7 @@ void rcc_init(void)
     // 5. Настройка делителей шин
     RCC->CFGR = 0;
     RCC->CFGR |= RCC_CFGR_HPRE_DIV1;    // AHB = 84 МГц
-    RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;   // APB1 = 21 МГц (макс 42 МГц)
+    RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;   // APB1 = 42 МГц (макс 42 МГц)
     RCC->CFGR |= RCC_CFGR_PPRE2_DIV2;   // APB2 = 42 МГц (макс 84 МГц)
     
     // 6. Настройка Flash для 84 МГц

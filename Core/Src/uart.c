@@ -71,12 +71,9 @@ uart_error_t uart_set_baudrate(uart_baudrate_t baudrate)
         // Отключить USART перед изменением BRR
         USART1->CR1 &= ~USART_CR1_UE;
 
-        uint32_t usartdiv = APB2_FREQUENCY / baudrate;
-        uint32_t brr_value = (usartdiv << 4) | ((APB2_FREQUENCY * 16 / baudrate) & 0xF);
-
-        // uint32_t brr_value = (APB2_FREQUENCY + baudrate/2) / baudrate;
-
-        USART1->BRR = brr_value;
+        uint32_t mantissa = APB2_FREQUENCY / baudrate;
+        uint32_t fraction = ((APB2_FREQUENCY * 16) / baudrate) - (mantissa * 16);
+        USART1->BRR = (mantissa << 4) | fraction;
 
         // Включить USART обратно
         USART1->CR1 |= USART_CR1_UE;

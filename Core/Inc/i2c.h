@@ -21,6 +21,12 @@ typedef enum {
     I2C_ERROR_PARAM
 } i2c_error_t;
 
+// Биты записи/чтения 
+typedef enum {
+    i2c_write_bit = 0,
+    i2c_read_bit = 1
+} i2c_rw_bit_t;
+
 // Структура для конфигурации I2C
 typedef struct {
     uint32_t clock_speed;      // Скорость в Гц (100000 или 400000)
@@ -34,7 +40,7 @@ void i2c_init(void);
 void i2c_init_with_config(const i2c_config_t *config);
 i2c_error_t i2c_set_speed(i2c_speed_t speed);
 i2c_error_t i2c_set_own_address(uint8_t address);
-
+const char* i2c_get_error_string(i2c_error_t error);
 
 // Функции для работы в режиме Master
 i2c_error_t i2c_master_transmit(

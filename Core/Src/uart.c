@@ -2,12 +2,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "button.h"
 #include "stm32f407xx.h"
+#include "delay.h"
+#include "button.h"
 #include "uart.h"
+
 
 // Частота APB2 для USART1 (42 МГц после настройки RCC)
 #define APB2_FREQUENCY 42000000UL
+#define TIMEOUT_2s     2000
 
 // Внутренние переменные
 static bool is_initialized = false;
@@ -34,28 +37,48 @@ void uart_init(void)
     GPIOA->AFR[1] &= ~(GPIO_AFRH_AFSEL9 | GPIO_AFRH_AFSEL10);
     GPIOA->AFR[1] |= (7 << GPIO_AFRH_AFSEL9_Pos) | (7 << GPIO_AFRH_AFSEL10_Pos);
 
-    // 3. Настроить USART
+    // 3. Сбросить USART перед настройкой
     USART1->CR1 &= ~(USART_CR1_UE);  // Отключить USART для настройки
 
-    // Установка скорости по умолчанию
+    // 4. Настроить скорость
     uart_error_t result = uart_set_baudrate(current_baudrate);
     if (UART_ERROR_PARAM == result) {
         return;
     }
 
-    USART1->CR1 |= USART_CR1_TE | USART_CR1_RE;     // Вкл. передатчик и приемник
+    // 5. Настроить формат (8 бит, без четности, 1 стоп)
     USART1->CR1 &= ~(USART_CR1_M | USART_CR1_PCE);  // 8 бит, без контроля четности
     USART1->CR2 &= ~(USART_CR2_STOP);               // 1 стоповый бит
 
-    // 4. Включить прерывания (если нужно)
+    // 6. Включить передатчик и приемник
+    USART1->CR1 |= USART_CR1_TE | USART_CR1_RE;     // Вкл. передатчик и приемник
+
+    // 7. Включить USART
+    USART1->CR1 |= USART_CR1_UE;
+
+    // 8. Включить прерывания (если нужно)
     USART1->CR1 |= USART_CR1_RXNEIE;                // Прерывание по приему
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 0);
 
-    // 5. Включить USART
-    USART1->CR1 |= USART_CR1_UE;
-    
     is_initialized = true;
+}
+
+void uart_flush_buffers(void) 
+{
+    // 1. Отключаем USART
+    USART1->CR1 &= ~USART_CR1_UE;
+    
+    // 2. Очищаем буфер RX (читаем весь мусор)
+    while (USART1->SR & USART_SR_RXNE) {
+        (void)USART1->DR;
+    }
+    
+    // 3. Сбрасываем флаги статуса (TC, TXE, IDLE, и т.д.)
+    USART1->SR = 0;
+    
+    // 4. Включаем USART обратно
+    USART1->CR1 |= USART_CR1_UE;
 }
 
 uart_error_t uart_set_baudrate(uart_baudrate_t baudrate)
@@ -66,21 +89,35 @@ uart_error_t uart_set_baudrate(uart_baudrate_t baudrate)
 
     // Сохранить текущую скорость
     current_baudrate = baudrate;
+    
+    // Таблица готовых значений BRR для APB2 = 42 MHz
+    uint32_t brr_value;
+
+    switch(baudrate) {
+        case UART_BAUDRATE_9600:   brr_value = 0x1117; break;  // 273.6875 → 0x1117
+        case UART_BAUDRATE_19200:  brr_value = 0x088B; break;  // 136.84375 → 0x088B
+        case UART_BAUDRATE_38400:  brr_value = 0x0445; break;  // 68.421875 → 0x0445
+        case UART_BAUDRATE_57600:  brr_value = 0x02DC; break;  // 45.609375 → 0x02DC
+        case UART_BAUDRATE_115200: brr_value = 0x016C; break;  // 22.8046875 → 0x016C
+        case UART_BAUDRATE_230400: brr_value = 0x00B6; break;  // 11.40234375 → 0x00B6
+        case UART_BAUDRATE_460800: brr_value = 0x005B; break;  // 5.701171875 → 0x005B
+        case UART_BAUDRATE_921600: brr_value = 0x002D; break;  // 2.8505859375 → 0x002D
+        default:
+            // Расчет для нестандартных скоростей
+            uint32_t usartdiv = (APB2_FREQUENCY * 100) / (16 * baudrate);
+            uint32_t mantissa = usartdiv / 100;
+            uint32_t fraction = ((usartdiv % 100) * 16 + 50) / 100;
+            brr_value = (mantissa << 4) | fraction;
+            break;
+    }
 
     if (is_initialized) {
         // Отключить USART перед изменением BRR
         USART1->CR1 &= ~USART_CR1_UE;
-
-        uint32_t mantissa = APB2_FREQUENCY / baudrate;
-        uint32_t fraction = ((APB2_FREQUENCY * 16) / baudrate) - (mantissa * 16);
-        USART1->BRR = (mantissa << 4) | fraction;
-
+        USART1->BRR = brr_value;
         // Включить USART обратно
         USART1->CR1 |= USART_CR1_UE;
     } else {
-        // Рассчитать BRR (округление к ближайшему)
-        uint32_t brr_value = APB2_FREQUENCY / baudrate;
-
         USART1->BRR = brr_value;
     }
 
@@ -101,25 +138,33 @@ uart_error_t uart_send_data(const uint8_t* data, uint32_t size)
         return UART_ERROR_PARAM;
     }
 
+    // 2. Отправляем все байты
     for (uint32_t i = 0; i < size; i++)
     {
-        // Проверка таймаута (защита от зависания)
-        uint32_t timeout = 1000000;
-        while ( !(USART1->SR & USART_SR_TXE) )
-        {
-            if (--timeout == 0) {
+        uint32_t start_tick = get_tick_ms();
+        
+        // Ждем готовности передатчика (TXE)
+        while (!(USART1->SR & USART_SR_TXE)) {
+            if ((get_tick_ms() - start_tick) > TIMEOUT_2s) {
                 return UART_ERROR_TIMEOUT;
             }
+            
+            // Проверка на ошибки (если нужно)
+            if (USART1->SR & (USART_SR_ORE | USART_SR_FE | USART_SR_NE)) {
+                // Сброс ошибок чтением SR
+                uint32_t temp = USART1->SR;
+                (void)temp;
+                return UART_ERROR_PARAM;
+            }
         }
-
+        
         USART1->DR = data[i];
     }
-
-    // Ждем завершения передачи последнего байта
-    uint32_t timeout = 1000000;
-    while ( !(USART1->SR & USART_SR_TC) )
-    {
-        if (--timeout == 0) {
+    
+    // 3. Ждем завершения передачи последнего байта (TC)
+    uint32_t start_tick = get_tick_ms();
+    while (!(USART1->SR & USART_SR_TC)) {
+        if ((get_tick_ms() - start_tick) > TIMEOUT_2s) {
             return UART_ERROR_TIMEOUT;
         }
     }
@@ -230,7 +275,7 @@ uart_baudrate_t uart_get_current_baudrate(void)
 // Обработчик прерывания USART1
 void USART1_IRQHandler(void)
 {
-    if (0 != (USART1->SR & USART_SR_RXNE))
+    if ( 0 != (USART1->SR & USART_SR_RXNE) )
     {
         uint16_t received_data = (uint16_t) (USART1->DR & (uint16_t)0x1FF);
 
@@ -246,6 +291,9 @@ void USART1_IRQHandler(void)
                 break;
             case '3':
                 command_id = TURN_LED_3_ON;
+                break;
+            case '4':
+                command_id = ERASE_EEPROM;
                 break;
             default:
                 command_id = NONE;

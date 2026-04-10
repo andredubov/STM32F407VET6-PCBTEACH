@@ -1,22 +1,22 @@
 #include "stm32f407xx.h"
 
-void rcc_init(void) 
+void rcc_init(void)
 {
     // 1. Включить HSI как временный источник
     RCC->CR |= RCC_CR_HSION;
-    while (!(RCC->CR & RCC_CR_HSIRDY)) {
+    while ( !(RCC->CR & RCC_CR_HSIRDY) ) {
         __NOP();
     }
 
     // 2. Включить HSE (внешний кварц 25 МГц)
     RCC->CR |= RCC_CR_HSEON;
-    while (!(RCC->CR & RCC_CR_HSERDY)) {
+    while ( !(RCC->CR & RCC_CR_HSERDY) ) {
         __NOP();
     }
 
     // 3. Отключить PLL перед настройкой
     RCC->CR &= ~RCC_CR_PLLON;
-    while (RCC->CR & RCC_CR_PLLRDY) {
+    while ( RCC->CR & RCC_CR_PLLRDY ) {
         __NOP();
     }
 
@@ -63,7 +63,7 @@ void rcc_init(void)
     
     // 7. Включить PLL
     RCC->CR |= RCC_CR_PLLON;
-    while (!(RCC->CR & RCC_CR_PLLRDY)) {
+    while ( !(RCC->CR & RCC_CR_PLLRDY) ) {
         __NOP();
     }
     
@@ -71,7 +71,7 @@ void rcc_init(void)
     RCC->CFGR &= ~RCC_CFGR_SW;
     RCC->CFGR |= RCC_CFGR_SW_PLL;
     
-    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL) {
+    while ( (RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL ) {
         __NOP();
     }
 }

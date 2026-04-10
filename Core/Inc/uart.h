@@ -3,13 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-typedef enum {
-    TURN_ALL_LEDS_OFF = '0',
-    TURN_LED_1_ON = '1',
-    TURN_LED_2_ON = '2',
-    TURN_LED_3_ON = '3'
-} command_id_t;
+#include "command.h"
 
 // Enum для стандартных скоростей UART
 typedef enum {
@@ -47,6 +41,7 @@ uart_error_t uart_send_line(const char* str);
 uart_error_t uart_printf(const char* format, ...);
 uart_error_t uart_printf_line(const char* format, ...);
 bool uart_is_ready_to_send(void);
+void uart_flush_buffers(void);
 
 // Функции приема
 uint8_t uart_receive_byte(void);

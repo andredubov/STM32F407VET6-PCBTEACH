@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "stm32f407xx.h"
 #include "system_stm32f4xx.h"
 #include "delay.h"
@@ -5,3 +6,7 @@
 #include "led.h"
 #include "button.h"
 #include "uart.h"
+#include "i2c.h"
+#include "at24c02.h"
+#include "command.h"
+#include "task.h"

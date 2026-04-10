@@ -1,32 +1,57 @@
 #include "stm32f407xx.h"
+#include "delay.h"
 #include "button.h"
+#include "task.h"
+
+#define READING_LEDS_STATE_TIME_MS 1000
 
 volatile uint32_t system_tick = 1;
+volatile static event_id_t event_id = NONE;
 
 void SysTick_Handler(void)
 {
-    system_tick++;
+    static uint8_t debounce_counter = 0;
+    static uint16_t reading_leds_state_counter = 0;
 
-    if ( (system_tick % DEBOUNCE_TIME_MS) == 0)
-    {
-        buttons_debounce_handler();  // вызов обработчика демпфирования каждые 10 мс
+    system_tick++;
+    debounce_counter++;
+    reading_leds_state_counter++;
+
+    // Вызываем обработчик кнопок каждые DEBOUNCE_TIME_MS (10 мс)
+    if (debounce_counter >= DEBOUNCE_TIME_MS) {
+        debounce_counter = 0;
+        buttons_debounce_handler();
+    }
+
+    // Вызываем обработчик каждые READING_LEDS_STATE_TIME_MS (1 с)
+    if (reading_leds_state_counter >= READING_LEDS_STATE_TIME_MS) {
+        reading_leds_state_counter = 0;
+        event_id = RUNNING_LEDS_FROM_EEPROM;
     }
 }
 
-uint32_t get_tick(void)
+uint32_t get_tick_ms(void)
 {
     return system_tick;
 }
 
-void delay_init(uint32_t frequency_khz)
+event_id_t get_event(void)
 {
-    // frequency_khz = 84000 (84 МГц в кГц)
+    event_id_t event = event_id;
+    event_id = NONE;  // Сброс после чтения
+    return event;
+}
+
+void delay_init(uint32_t frequency_hz)
+{
+    // frequency_hz = 84,000,000 (84 МГц в Гц)
     // Для 1 мс интервала нужно: (частота_в_герцах / 1000) - 1
     // 84 МГц = 84,000,000 Гц
     // 84,000,000 / 1000 = 84,000
     // LOAD = 84,000 - 1 = 83,999
 
-    uint32_t reload_value = (frequency_khz) - 1; // 84000 - 1 = 83999
+    // Расчёт для прерывания каждые 1 мс
+    uint32_t reload_value = (frequency_hz / 1000) - 1; // 84000 - 1 = 83999
     
     if (reload_value > 0xFFFFFF) {
         reload_value = 0xFFFFFF;  // максимальное значение

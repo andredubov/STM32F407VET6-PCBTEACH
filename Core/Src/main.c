@@ -1,4 +1,6 @@
 #include "main.h"
+#include "spi.h"
+#include "uart.h"
 
 int main(void)
 {
@@ -11,9 +13,23 @@ int main(void)
     buttons_init(); // настройка кнопок
     uart_init();    // настройка UART (по умолчанию 115200)
     i2c_init();     // настройка I2C (100 кГц)
+    spi_init();     // настройка SPI (10.5 МГц до 133 МГц)
     at24c02_init(i2c_device_address); // иницилизация модуля для взаимодействия с микросхемой AT24C02B
+    w25q64_init();  // иницилизация модуля для взаимодействия с микросхемой W25Q64
 
     __enable_irq();
+
+    // w25q64_reset();
+    // delay_ms(10);
+    
+    // w25q64_print_status();
+    // w25q64_print_jedec_id();
+
+    uint32_t id = w25q64_read_unique_id();
+    uart_printf_line("w25q64_read_unique_id: 0x%08X\n", id);
+
+    // w25q64_write_enable();
+    // w25q64_sector_erase(0x20FF00);
 
     for (;;)
     {

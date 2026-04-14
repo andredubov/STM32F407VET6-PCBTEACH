@@ -7,6 +7,8 @@
 #include "button.h"
 #include "uart.h"
 #include "i2c.h"
+#include "spi.h"
 #include "at24c02.h"
+#include "w25q64.h"
 #include "command.h"
 #include "task.h"

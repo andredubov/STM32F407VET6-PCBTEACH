@@ -23,7 +23,9 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/rcc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/uart.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/i2c.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/spi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/at24c02.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/w25q64.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/task.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/command.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/stm32f4xx_it.c

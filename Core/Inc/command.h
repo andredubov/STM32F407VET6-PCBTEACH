@@ -2,6 +2,7 @@
 #define COMMAND_H
 
 typedef enum {
+    CMD_NONE = 0,
     TURN_ALL_LEDS_OFF = '0',
     TURN_LED_1_ON = '1',
     TURN_LED_2_ON = '2',

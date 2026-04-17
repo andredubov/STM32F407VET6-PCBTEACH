@@ -12,7 +12,7 @@ static bool is_initialized = false;
 static spi_config_t default_config = {
     .mode = SPI_MODE_0,
     .data_size = SPI_DATA_SIZE_8BIT,
-    .baudrate = SPI_BAUDRATE_DIV_256,
+    .baudrate = SPI_BAUDRATE_DIV_32,
     .msb_first = true,
     .software_ssm = true
 };
@@ -20,7 +20,7 @@ static spi_config_t default_config = {
 static spi_config_t current_config = {
     .mode = SPI_MODE_0,
     .data_size = SPI_DATA_SIZE_8BIT,
-    .baudrate = SPI_BAUDRATE_DIV_4,
+    .baudrate = SPI_BAUDRATE_DIV_32,
     .msb_first = true,
     .software_ssm = true
 };
@@ -124,8 +124,6 @@ void spi_init_with_config(const spi_config_t *config)
     }
 
     SPI2->CR1 = cr1;
-
-    // CR2: настройки (RXNE при прерывании, фреймы и т.д.)
     SPI2->CR2 = 0;
 
     // 5. Включить SPI
@@ -251,6 +249,24 @@ spi_error_t spi_transmit_byte(uint8_t data)
     // Отправляем данные
     SPI2->DR = data;
     
+    start_tick = get_tick_ms();
+    while ( !(SPI2->SR & SPI_SR_RXNE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+
+        // Проверка на переполнение
+        if (SPI2->SR & SPI_SR_OVR) {
+            // Сброс флага OVR чтением SR и DR
+            volatile uint32_t temp = SPI2->SR;
+            temp = SPI2->DR;
+            (void)temp;
+            return SPI_ERROR_OVERRUN;
+        }
+    }
+
+    data = (uint8_t)SPI2->DR;
+
     // Ждем завершения передачи (BSY)
     start_tick = get_tick_ms();
     while ( SPI2->SR & SPI_SR_BSY ) {
@@ -269,9 +285,8 @@ spi_error_t spi_receive_byte(uint8_t *data)
         return SPI_ERROR_PARAM;
     }
 
-    uint32_t start_tick = get_tick_ms();
-
     // 1. Ждем готовности TX буфера
+    uint32_t start_tick = get_tick_ms();
     while ( !(SPI2->SR & SPI_SR_TXE) ) {
         if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
             return SPI_ERROR_TIMEOUT;
@@ -301,6 +316,14 @@ spi_error_t spi_receive_byte(uint8_t *data)
     // 4. Читаем данные
     *data = (uint8_t)SPI2->DR;
 
+    // Ждем завершения передачи (BSY)
+    start_tick = get_tick_ms();
+    while ( SPI2->SR & SPI_SR_BSY ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+
     return SPI_OK;
 }
 
@@ -311,10 +334,9 @@ spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
         return SPI_ERROR_PARAM;
     }
     
-    uint32_t start_tick = get_tick_ms();
-    
     // Ждем готовности TX
-    while ( !(SPI2->SR & SPI_SR_TXE) ) {
+    uint32_t start_tick = get_tick_ms();
+    while ( 0 == (SPI2->SR & SPI_SR_TXE) ) {
         if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
             return SPI_ERROR_TIMEOUT;
         }
@@ -325,7 +347,7 @@ spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
     
     // Ждем, пока RX буфер не заполнится
     start_tick = get_tick_ms();
-    while ( !(SPI2->SR & SPI_SR_RXNE) ) {
+    while ( 0 == (SPI2->SR & SPI_SR_RXNE) ) {
         if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
             return SPI_ERROR_TIMEOUT;
         }
@@ -360,9 +382,9 @@ spi_error_t spi_transmit_buffer(const uint8_t *tx_buffer, uint32_t size)
     }
     
     for (uint32_t i = 0; i < size; i++) {
-        spi_error_t result = spi_transmit_byte(tx_buffer[i]);
-        if (result != SPI_OK) {
-            return result;
+        spi_error_t spi_error = spi_transmit_byte(tx_buffer[i]);
+        if (spi_error != SPI_OK) {
+            return spi_error;
         }
     }
     
@@ -377,9 +399,9 @@ spi_error_t spi_receive_buffer(uint8_t *rx_buffer, uint32_t size)
     }
     
     for (uint32_t i = 0; i < size; i++) {
-        spi_error_t result = spi_receive_byte(&rx_buffer[i]);
-        if (result != SPI_OK) {
-            return result;
+        spi_error_t spi_error = spi_receive_byte(&rx_buffer[i]);
+        if (spi_error != SPI_OK) {
+            return spi_error;
         }
     }
     

@@ -6,10 +6,9 @@
 
 // Адресация W25Q64 (64 Mbit = 8 MByte)
 #define W25Q64_SIZE             0x800000    // 8,388,608 байт (8 МБ)
-#define W25Q64_PAGE_SIZE        256         // 256 байт на страницу
-#define W25Q64_SECTOR_SIZE      4096        // 4 КБ на сектор
-#define W25Q64_BLOCK_SIZE_32KB  32768       // 32 КБ на блок
-#define W25Q64_BLOCK_SIZE_64KB  65536       // 64 КБ на блок
+#define W25Q64_PAGE_SIZE        0x100       // 256 байт на страницу
+#define W25Q64_SECTOR_SIZE      0x1000      // 4 КБ на сектор
+#define W25Q64_BLOCK_SIZE       0x10000     // 64 КБ на блок
 
 // Команды W25Q64
 typedef enum {
@@ -28,14 +27,14 @@ typedef enum {
     W25Q_CMD_FAST_READ         = 0x0B,     // до 133 МГц
     W25Q_CMD_READ_DUAL         = 0x3B,
     W25Q_CMD_READ_QUAD         = 0x6B,
-    
+
     // Команды записи/стирания
     W25Q_CMD_PAGE_PROGRAM      = 0x02,
     W25Q_CMD_SECTOR_ERASE_4KB  = 0x20,
     W25Q_CMD_BLOCK_ERASE_32KB  = 0x52,
     W25Q_CMD_BLOCK_ERASE_64KB  = 0xD8,
     W25Q_CMD_CHIP_ERASE        = 0xC7,     // или 0x60
-    
+
     // Команды для защиты
     W25Q_CMD_READ_UNIQUE_ID    = 0x4B,
     W25Q_CMD_READ_JEDEC_ID     = 0x9F,
@@ -44,7 +43,7 @@ typedef enum {
     W25Q_CMD_RESET_DEVICE      = 0x99,
     W25Q_CMD_POWER_DOWN        = 0xB9,
     W25Q_CMD_RELEASE_POWER_DOWN = 0xAB,
-    
+
     // Команды для Quad I/O
     W25Q_CMD_FAST_READ_QUAD    = 0xEB,
     W25Q_CMD_QUAD_PAGE_PROGRAM = 0x32
@@ -65,6 +64,7 @@ typedef enum {
 // Результаты операций
 typedef enum {
     W25Q_OK = 0,
+    W25Q_ERROR_SPI_COMMUNICATION,
     W25Q_ERROR_PARAM,
     W25Q_ERROR_TIMEOUT,
     W25Q_ERROR_BUSY,
@@ -81,45 +81,44 @@ typedef struct {
 } w25q64_jedec_id_t;
 
 // Основные функции
-void w25q64_init(void);
-bool w25q64_is_present(void);
+w25q64_error_t w25q64_init(void);
+w25q64_error_t w25q64_is_present(bool *is_present);
 
 // Чтение ID
 w25q64_error_t w25q64_read_jedec_id(w25q64_jedec_id_t *id);
-uint32_t w25q64_read_unique_id(void);
-uint8_t w25q64_read_manufacturer_device_id(void);
+w25q64_error_t w25q64_read_unique_id(uint32_t* unique_id);
+w25q64_error_t w25q64_read_manufacturer_device_id(uint8_t* device_id);
 
 // Регистры статуса
-uint8_t w25q64_read_status_register1(void);
-uint8_t w25q64_read_status_register2(void);
-uint8_t w25q64_read_status_register3(void);
+w25q64_error_t w25q64_read_status_register1(uint8_t *status);
+w25q64_error_t w25q64_read_status_register2(uint8_t *status);
+w25q64_error_t w25q64_read_status_register3(uint8_t *status);
 w25q64_error_t w25q64_write_status_register1(uint8_t value);
 w25q64_error_t w25q64_write_status_register2(uint8_t value);
 w25q64_error_t w25q64_write_status_register3(uint8_t value);
 
 // Управление записью
-void w25q64_write_enable(void);
-void w25q64_write_disable(void);
-bool w25q64_is_busy(void);
-void w25q64_wait_for_ready(uint32_t timeout_ms);
+w25q64_error_t w25q64_write_enable(void);
+w25q64_error_t w25q64_write_disable(void);
+w25q64_error_t w25q64_is_busy(bool *is_busy);
+w25q64_error_t w25q64_wait_for_ready(uint32_t timeout_ms);
 
 // Основные операции
-w25q64_error_t w25q64_read_data(uint32_t address, uint8_t *buffer, uint32_t size);
-w25q64_error_t w25q64_fast_read_data(uint32_t address, uint8_t *buffer, uint32_t size);
-w25q64_error_t w25q64_page_program(uint32_t address, const uint8_t *data, uint16_t size);
-w25q64_error_t w25q64_write_buffer(uint32_t address, const uint8_t *data, uint32_t size);
+w25q64_error_t w25q64_read_byte(uint32_t address, uint8_t *buffer);
+w25q64_error_t w25q64_read_bytes(uint32_t address, uint8_t *buffer, uint32_t size);
+w25q64_error_t w25q64_write_byte(uint32_t address, uint8_t *buffer);
+w25q64_error_t w25q64_write_bytes(uint32_t address, uint8_t *buffer, uint32_t size);
+w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t size);
 
 // Стирание
-w25q64_error_t w25q64_sector_erase(uint32_t address);
-w25q64_error_t w25q64_block_erase_32kb(uint32_t address);
-w25q64_error_t w25q64_block_erase_64kb(uint32_t address);
-w25q64_error_t w25q64_chip_erase(void);
+w25q64_error_t w25q64_erase_chip(void);
+w25q64_error_t w25q64_erase_sector_4KB(uint32_t address);
+w25q64_error_t w25q64_erase_block_64kb(uint32_t address);
 
 // Утилиты
-void w25q64_power_down(void);
-void w25q64_release_power_down(void);
-void w25q64_reset(void);
-w25q64_error_t w25q64_erase_all(void);
+w25q64_error_t w25q64_reset(void);
+w25q64_error_t w25q64_power_down(void);
+w25q64_error_t w25q64_release_power_down(void);
 
 // Функции для отладки
 void w25q64_print_status(void);

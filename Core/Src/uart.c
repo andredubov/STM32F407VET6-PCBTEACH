@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "command.h"
 #include "stm32f407xx.h"
 #include "delay.h"
 #include "button.h"
@@ -15,7 +16,7 @@
 // Внутренние переменные
 static bool is_initialized = false;
 static uart_baudrate_t current_baudrate = UART_BAUDRATE_115200;
-volatile static command_id_t command_id = TURN_ALL_LEDS_OFF;
+volatile static command_id_t command_id = CMD_NONE;
 
 // Буфер для форматированного вывода
 static char print_buffer[128];
@@ -229,7 +230,7 @@ uart_error_t uart_printf_line(const char* format, ...)
 {
     va_list args;
     int length;
-    
+
     // Форматируем строку во временный буфер
     va_start(args, format);
     length = vsnprintf(print_buffer, sizeof(print_buffer), format, args);
@@ -296,7 +297,7 @@ void USART1_IRQHandler(void)
                 command_id = ERASE_EEPROM;
                 break;
             default:
-                command_id = NONE;
+                command_id = CMD_NONE;
                 break;
         }
     }
@@ -305,6 +306,6 @@ void USART1_IRQHandler(void)
 command_id_t get_command_id(void)
 {
     command_id_t cmd = command_id;
-    command_id = NONE;  // Сброс после чтения
+    command_id = CMD_NONE;  // Сброс после чтения
     return cmd;
 }

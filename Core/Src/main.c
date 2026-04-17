@@ -1,6 +1,4 @@
 #include "main.h"
-#include "spi.h"
-#include "uart.h"
 
 int main(void)
 {
@@ -19,17 +17,9 @@ int main(void)
 
     __enable_irq();
 
-    // w25q64_reset();
-    // delay_ms(10);
-    
-    // w25q64_print_status();
-    // w25q64_print_jedec_id();
-
-    uint32_t id = w25q64_read_unique_id();
-    uart_printf_line("w25q64_read_unique_id: 0x%08X\n", id);
-
-    // w25q64_write_enable();
-    // w25q64_sector_erase(0x20FF00);
+    save_led_id_into_eeprom(LED_1);
+    save_led_id_into_eeprom(LED_2);
+    save_led_id_into_eeprom(LED_3);
 
     for (;;)
     {
@@ -37,26 +27,22 @@ int main(void)
 
         switch (button_event_id) {
             case BUTTON_1_PRESSED:
-                save_pressed_button_into_eeprom(LED_1);
+                load_led_id_from_eeprom(LED_1);
                 uart_send_line("button S1 pressed");
                 break;
             case BUTTON_2_PRESSED:
-                save_pressed_button_into_eeprom(LED_2);
+                load_led_id_from_eeprom(LED_2);
                 uart_send_line("button S2 pressed");
                 break;
             case BUTTON_3_PRESSED:
-                save_pressed_button_into_eeprom(LED_3);
+                load_led_id_from_eeprom(LED_3);
                 uart_send_line("button S3 pressed");
                 break;
             default:
                 break;
         }
 
-        event_id_t event_id = get_event();
-
-        if (RUNNING_LEDS_FROM_EEPROM == event_id) {
-            runnig_leds_from_eeprom();
-        }
+        switch_on_led();
 
         command_id_t command_id = get_command_id();
 

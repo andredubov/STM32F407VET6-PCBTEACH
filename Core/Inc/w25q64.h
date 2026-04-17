@@ -109,6 +109,7 @@ w25q64_error_t w25q64_read_bytes(uint32_t address, uint8_t *buffer, uint32_t siz
 w25q64_error_t w25q64_write_byte(uint32_t address, uint8_t *buffer);
 w25q64_error_t w25q64_write_bytes(uint32_t address, uint8_t *buffer, uint32_t size);
 w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t size);
+w25q64_error_t w25q64_update_data_16(uint32_t address, uint16_t* new_data, uint32_t size);
 
 // Стирание
 w25q64_error_t w25q64_erase_chip(void);

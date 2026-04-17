@@ -15,7 +15,7 @@
 static bool is_initialized = false;
 
 static uint8_t sector_buffer[W25Q64_SECTOR_SIZE];
-static uint8_t temp_buffer[W25Q64_SECTOR_SIZE];
+// static uint8_t temp_buffer[W25Q64_SECTOR_SIZE];
 
 static bool is_sector_changed(const uint8_t* old_data, const uint8_t* new_data, uint32_t offset, uint32_t size) 
 {
@@ -739,14 +739,14 @@ w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t 
         }
         
         // Читаем текущий сектор
-        w25q64_error = w25q64_read_bytes(sector_start, temp_buffer, W25Q64_SECTOR_SIZE);
+        w25q64_error = w25q64_read_bytes(sector_start, sector_buffer, W25Q64_SECTOR_SIZE);
         if (w25q64_error != W25Q_OK) {
             return w25q64_error;
         }
         
         // Проверяем, есть ли реальные изменения
         bool is_changed = is_sector_changed(
-            temp_buffer, 
+            sector_buffer, 
             new_data + bytes_processed, 
             sector_offset, 
             sector_size
@@ -754,7 +754,7 @@ w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t 
 
         if (is_changed) {
             // Изменяем данные в буфере
-            memcpy(temp_buffer + sector_offset, new_data + bytes_processed, sector_size);
+            memcpy(sector_buffer + sector_offset, new_data + bytes_processed, sector_size);
             
             // Стираем сектор
             w25q64_error = w25q64_erase_sector_4KB(sector_start);
@@ -763,7 +763,71 @@ w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t 
             }
             
             // Записываем обновленный сектор
-            w25q64_error = w25q64_write_bytes(sector_start, temp_buffer, W25Q64_SECTOR_SIZE);
+            w25q64_error = w25q64_write_bytes(sector_start, sector_buffer, W25Q64_SECTOR_SIZE);
+            if (w25q64_error != W25Q_OK) {
+                return w25q64_error;
+            }
+        }
+        
+        bytes_processed += sector_size;
+    }
+    
+    return W25Q_OK;
+}
+
+w25q64_error_t w25q64_update_data_16(uint32_t address, uint16_t* new_data, uint32_t size)
+{
+    return W25Q_OK;
+}
+
+w25q64_error_t w25q64_update_byte(uint32_t address, uint8_t* new_data, uint32_t size)
+{
+    w25q64_error_t w25q64_error;
+    uint32_t first_sector = address & ~(W25Q64_SECTOR_SIZE - 1);
+    uint32_t last_sector = (address + size - 1) & ~(W25Q64_SECTOR_SIZE - 1);
+    uint32_t bytes_processed = 0;
+    
+    if (!new_data || size == 0 || address + size > W25Q64_SIZE) {
+        return W25Q_ERROR_PARAM;
+    }
+    
+    // Обрабатываем каждый сектор
+    for (uint32_t sector = first_sector; sector <= last_sector; sector += W25Q64_SECTOR_SIZE) {
+        uint32_t sector_start = sector;
+        uint32_t sector_offset = (sector == first_sector) ? (address - first_sector) : 0;
+        uint32_t sector_size = W25Q64_SECTOR_SIZE - sector_offset;
+        
+        // Корректируем размер для последнего сектора
+        if (sector == last_sector) {
+            sector_size = size - bytes_processed;
+        }
+        
+        // Читаем текущий сектор
+        w25q64_error = w25q64_read_bytes(sector_start, sector_buffer, W25Q64_SECTOR_SIZE);
+        if (w25q64_error != W25Q_OK) {
+            return w25q64_error;
+        }
+        
+        // Проверяем, есть ли реальные изменения
+        bool is_changed = is_sector_changed(
+            sector_buffer, 
+            new_data + bytes_processed, 
+            sector_offset, 
+            sector_size
+        );
+
+        if (is_changed) {
+            // Изменяем данные в буфере
+            memcpy(sector_buffer + sector_offset, new_data + bytes_processed, sector_size);
+            
+            // Стираем сектор
+            w25q64_error = w25q64_erase_sector_4KB(sector_start);
+            if (w25q64_error != W25Q_OK) {
+                return w25q64_error;
+            }
+            
+            // Записываем обновленный сектор
+            w25q64_error = w25q64_write_bytes(sector_start, sector_buffer, W25Q64_SECTOR_SIZE);
             if (w25q64_error != W25Q_OK) {
                 return w25q64_error;
             }

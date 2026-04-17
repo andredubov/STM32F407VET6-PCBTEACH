@@ -278,6 +278,63 @@ spi_error_t spi_transmit_byte(uint8_t data)
     return SPI_OK;
 }
 
+// Отправка одного слова
+spi_error_t spi_transmit_word(uint16_t data)
+{
+    uint32_t start_tick = get_tick_ms();
+    
+    // Ждем, пока TX буфер не опустеет
+    while ( !(SPI2->SR & SPI_SR_TXE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+    
+    // Отправляем данные
+    SPI2->DR = data;
+    
+    start_tick = get_tick_ms();
+    while ( !(SPI2->SR & SPI_SR_RXNE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+
+        // Проверка на переполнение
+        if (SPI2->SR & SPI_SR_OVR) {
+            // Сброс флага OVR чтением SR и DR
+            volatile uint32_t temp = SPI2->SR;
+            temp = SPI2->DR;
+            (void)temp;
+            return SPI_ERROR_OVERRUN;
+        }
+    }
+
+    data = (uint16_t)SPI2->DR;
+
+    // Ждем завершения передачи (BSY)
+    start_tick = get_tick_ms();
+    while ( SPI2->SR & SPI_SR_BSY ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+    
+    return SPI_OK;
+}
+
+// Универсальная отправка данных
+spi_error_t spi_transmit_data(void *data, spi_data_size_t size_in_bit)
+{
+    switch (size_in_bit) {
+        case SPI_DATA_SIZE_8BIT:
+            return spi_transmit_byte(*(uint8_t*)data);
+        case SPI_DATA_SIZE_16BIT:
+            return spi_transmit_word(*(uint16_t*)data);
+        default:
+            return spi_transmit_byte(*(uint8_t*)data);
+    }
+}
+
 // Прием одного байта
 spi_error_t spi_receive_byte(uint8_t *data)
 {
@@ -327,7 +384,69 @@ spi_error_t spi_receive_byte(uint8_t *data)
     return SPI_OK;
 }
 
-// Одновременная передача и прием
+// Прием одного слова
+spi_error_t spi_receive_word(uint16_t *data)
+{
+    if (!data) {
+        return SPI_ERROR_PARAM;
+    }
+
+    // 1. Ждем готовности TX буфера
+    uint32_t start_tick = get_tick_ms();
+    while ( !(SPI2->SR & SPI_SR_TXE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+
+    // 2. Отправляем dummy байт для генерации тактов
+    SPI2->DR = 0xFF;
+
+    // 3. Ждем приема данных
+    start_tick = get_tick_ms();
+    while ( !(SPI2->SR & SPI_SR_RXNE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+
+        // Проверка на переполнение
+        if (SPI2->SR & SPI_SR_OVR) {
+            // Сброс флага OVR чтением SR и DR
+            volatile uint32_t temp = SPI2->SR;
+            temp = SPI2->DR;
+            (void)temp;
+            return SPI_ERROR_OVERRUN;
+        }
+    }
+
+    // 4. Читаем данные
+    *data = (uint16_t)SPI2->DR;
+
+    // Ждем завершения передачи (BSY)
+    start_tick = get_tick_ms();
+    while ( SPI2->SR & SPI_SR_BSY ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+
+    return SPI_OK;
+}
+
+// Универсальный прием данных
+spi_error_t spi_receive_data(void *data, spi_data_size_t size_in_bit)
+{
+    switch (size_in_bit) {
+        case SPI_DATA_SIZE_8BIT:
+            return spi_receive_byte((uint8_t*)data);
+        case SPI_DATA_SIZE_16BIT:
+            return spi_receive_word((uint16_t*)data);
+        default:
+            return spi_receive_byte((uint8_t*)data);
+    }
+}
+
+// Одновременная передача и прием байтов
 spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
 {
     if (!rx_data) {
@@ -374,15 +493,88 @@ spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
     return SPI_OK;
 }
 
+// Одновременная передача и прием слов
+spi_error_t spi_transmit_receive_word(uint16_t tx_data, uint16_t *rx_data)
+{
+    if (!rx_data) {
+        return SPI_ERROR_PARAM;
+    }
+    
+    // Ждем готовности TX
+    uint32_t start_tick = get_tick_ms();
+    while ( 0 == (SPI2->SR & SPI_SR_TXE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+    
+    // Отправляем данные
+    SPI2->DR = tx_data;
+    
+    // Ждем, пока RX буфер не заполнится
+    start_tick = get_tick_ms();
+    while ( 0 == (SPI2->SR & SPI_SR_RXNE) ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+        
+        if (SPI2->SR & SPI_SR_OVR) {
+            volatile uint32_t temp = SPI2->SR;
+            temp = SPI2->DR;
+            (void)temp;
+            return SPI_ERROR_OVERRUN;
+        }
+    }
+    
+    // Читаем принятые данные
+    *rx_data = (uint16_t)SPI2->DR;
+    
+    // Ждем завершения передачи
+    start_tick = get_tick_ms();
+    while ( SPI2->SR & SPI_SR_BSY ) {
+        if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
+            return SPI_ERROR_TIMEOUT;
+        }
+    }
+    
+    return SPI_OK;
+}
+
+// Универсальная передача и прием данных
+spi_error_t spi_transmit_receive_data(void* tx_data, void *rx_data, spi_data_size_t size_in_bit)
+{
+    switch (size_in_bit) {
+        case SPI_DATA_SIZE_8BIT:
+            return spi_transmit_receive_byte(*(uint8_t*)tx_data, (uint8_t*)rx_data);
+        case SPI_DATA_SIZE_16BIT:
+            return spi_transmit_receive_word(*(uint16_t*)tx_data, (uint16_t*)rx_data);
+        default:
+            return spi_transmit_receive_byte(*(uint8_t*)tx_data, (uint8_t*)rx_data);
+    }
+}
+
+
 // Отправка буфера
-spi_error_t spi_transmit_buffer(const uint8_t *tx_buffer, uint32_t size)
+spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit)
 {
     if (!tx_buffer || size == 0) {
         return SPI_ERROR_PARAM;
     }
+
+    spi_error_t spi_error;
     
     for (uint32_t i = 0; i < size; i++) {
-        spi_error_t spi_error = spi_transmit_byte(tx_buffer[i]);
+        switch (size_in_bit) {
+            case SPI_DATA_SIZE_8BIT:
+                spi_error = spi_transmit_byte(((uint8_t*)tx_buffer)[i]);
+                break;
+            case SPI_DATA_SIZE_16BIT:
+                spi_error = spi_transmit_byte(((uint16_t*)tx_buffer)[i]);
+                break;
+            default:
+                spi_error = spi_transmit_byte(((uint8_t*)tx_buffer)[i]);
+                break;
+        }
         if (spi_error != SPI_OK) {
             return spi_error;
         }
@@ -392,14 +584,26 @@ spi_error_t spi_transmit_buffer(const uint8_t *tx_buffer, uint32_t size)
 }
 
 // Прием буфера
-spi_error_t spi_receive_buffer(uint8_t *rx_buffer, uint32_t size)
+spi_error_t spi_receive_buffer(void *rx_buffer, uint32_t size, spi_data_size_t size_in_bit)
 {
     if (!rx_buffer || size == 0) {
         return SPI_ERROR_PARAM;
     }
+
+    spi_error_t spi_error;
     
     for (uint32_t i = 0; i < size; i++) {
-        spi_error_t spi_error = spi_receive_byte(&rx_buffer[i]);
+        switch (size_in_bit) {
+            case SPI_DATA_SIZE_8BIT:
+                spi_error = spi_receive_byte(&(((uint8_t*)rx_buffer)[i]));
+                break;
+            case SPI_DATA_SIZE_16BIT:
+                spi_error = spi_receive_word(&(((uint16_t*)rx_buffer)[i]));
+                break;
+            default:
+                spi_error = spi_receive_byte(&(((uint8_t*)rx_buffer)[i]));
+                break;
+        }
         if (spi_error != SPI_OK) {
             return spi_error;
         }
@@ -410,18 +614,31 @@ spi_error_t spi_receive_buffer(uint8_t *rx_buffer, uint32_t size)
 
 // Одновременная передача и прием буфера
 spi_error_t spi_transmit_receive_buffer(
-    const uint8_t *tx_buffer,
-    uint8_t *rx_buffer,
-    uint32_t size)
+    const void *tx_buffer,
+    void *rx_buffer,
+    uint32_t size,
+    spi_data_size_t size_in_bit)
 {
     if (!tx_buffer || !rx_buffer || size == 0) {
         return SPI_ERROR_PARAM;
     }
+
+    spi_error_t spi_error;
     
     for (uint32_t i = 0; i < size; i++) {
-        spi_error_t result = spi_transmit_receive_byte(tx_buffer[i], &rx_buffer[i]);
-        if (result != SPI_OK) {
-            return result;
+        switch (size_in_bit) {
+            case SPI_DATA_SIZE_8BIT:
+                spi_error = spi_transmit_receive_byte(((uint8_t*)tx_buffer)[i], &(((uint8_t*)rx_buffer)[i]));
+                break;
+            case SPI_DATA_SIZE_16BIT:
+                spi_error = spi_transmit_receive_word(((uint16_t*)tx_buffer)[i], &(((uint16_t*)rx_buffer)[i]));
+                break;
+            default:
+                spi_error = spi_transmit_receive_byte(((uint8_t*)tx_buffer)[i], &(((uint8_t*)rx_buffer)[i]));
+                break;
+        }
+        if (spi_error != SPI_OK) {
+            return spi_error;
         }
     }
     

@@ -58,18 +58,27 @@ void spi_cs_select(void);
 void spi_cs_deselect(void);
 void spi_cs_set(bool select);
 
-// Функции передачи/приема
+// 8-битные функции
 spi_error_t spi_transmit_byte(uint8_t data);
 spi_error_t spi_receive_byte(uint8_t *data);
 spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data);
 
-spi_error_t spi_transmit_buffer(const uint8_t *tx_buffer, uint32_t size);
-spi_error_t spi_receive_buffer(uint8_t *rx_buffer, uint32_t size);
+// 16-битные функции
+spi_error_t spi_transmit_word(uint16_t data);
+spi_error_t spi_receive_word(uint16_t *data);
+spi_error_t spi_transmit_receive_word(uint16_t tx_data, uint16_t *rx_data);
 
+// Универсальные функции
+spi_error_t spi_transmit_data(void *data, spi_data_size_t size_in_bit);
+spi_error_t spi_receive_data(void *data, spi_data_size_t size_in_bit);
+
+spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit);
+spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit);
 spi_error_t spi_transmit_receive_buffer(
-    const uint8_t *tx_buffer,
-    uint8_t *rx_buffer,
-    uint32_t size
+    const void *tx_buffer,
+    void *rx_buffer,
+    uint32_t size,
+    spi_data_size_t size_in_bit
 );
 
 // Утилиты

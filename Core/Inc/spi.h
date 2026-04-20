@@ -48,6 +48,12 @@ typedef struct {
     bool software_ssm;               // true - программное управление CS
 } spi_config_t;
 
+// Сохранение/восстановление конфигурации SPI
+typedef struct {
+    uint32_t cr1;
+    uint32_t cr2;
+} spi_config_snapshot_t;
+
 // Основные функции
 void spi_init(void);
 void spi_init_with_config(const spi_config_t *config);
@@ -57,6 +63,9 @@ spi_error_t spi_set_config(const spi_config_t *config);
 void spi_cs_select(void);
 void spi_cs_deselect(void);
 void spi_cs_set(bool select);
+
+void spi_set_16bit_mode(void);
+void spi_set_8bit_mode(void);
 
 // 8-битные функции
 spi_error_t spi_transmit_byte(uint8_t data);

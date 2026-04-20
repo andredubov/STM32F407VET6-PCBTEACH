@@ -25,6 +25,40 @@ static spi_config_t current_config = {
     .software_ssm = true
 };
 
+// Переключение в 16-битный режим
+void spi_set_16bit_mode(void)
+{
+    bool was_enabled = (SPI2->CR1 & SPI_CR1_SPE) != 0;
+    
+    if (was_enabled) {
+        spi_disable();
+    }
+    
+    // Устанавливаем 16-битный режим
+    SPI2->CR1 |= SPI_CR1_DFF;
+    
+    if (was_enabled) {
+        spi_enable();
+    }
+}
+
+// Переключение в 16-битный режим
+void spi_set_8bit_mode(void)
+{
+    bool was_enabled = (SPI2->CR1 & SPI_CR1_SPE) != 0;
+    
+    if (was_enabled) {
+        spi_disable();
+    }
+    
+    // Устанавливаем 8-битный режим
+    SPI2->CR1 &= ~(SPI_CR1_DFF);
+    
+    if (was_enabled) {
+        spi_enable();
+    }
+}
+
 // Инициализация SPI2 с конфигурацией по умолчанию
 void spi_init(void)
 {
@@ -237,8 +271,12 @@ void spi_flush_rx(void)
 // Отправка одного байта
 spi_error_t spi_transmit_byte(uint8_t data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     uint32_t start_tick = get_tick_ms();
-    
+
     // Ждем, пока TX буфер не опустеет
     while ( !(SPI2->SR & SPI_SR_TXE) ) {
         if ((get_tick_ms() - start_tick) > SPI_TIMEOUT_MS) {
@@ -281,6 +319,10 @@ spi_error_t spi_transmit_byte(uint8_t data)
 // Отправка одного слова
 spi_error_t spi_transmit_word(uint16_t data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     uint32_t start_tick = get_tick_ms();
     
     // Ждем, пока TX буфер не опустеет
@@ -324,7 +366,7 @@ spi_error_t spi_transmit_word(uint16_t data)
 
 // Универсальная отправка данных
 spi_error_t spi_transmit_data(void *data, spi_data_size_t size_in_bit)
-{
+{    
     switch (size_in_bit) {
         case SPI_DATA_SIZE_8BIT:
             return spi_transmit_byte(*(uint8_t*)data);
@@ -338,6 +380,10 @@ spi_error_t spi_transmit_data(void *data, spi_data_size_t size_in_bit)
 // Прием одного байта
 spi_error_t spi_receive_byte(uint8_t *data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!data) {
         return SPI_ERROR_PARAM;
     }
@@ -387,6 +433,10 @@ spi_error_t spi_receive_byte(uint8_t *data)
 // Прием одного слова
 spi_error_t spi_receive_word(uint16_t *data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!data) {
         return SPI_ERROR_PARAM;
     }
@@ -449,6 +499,10 @@ spi_error_t spi_receive_data(void *data, spi_data_size_t size_in_bit)
 // Одновременная передача и прием байтов
 spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!rx_data) {
         return SPI_ERROR_PARAM;
     }
@@ -496,6 +550,10 @@ spi_error_t spi_transmit_receive_byte(uint8_t tx_data, uint8_t *rx_data)
 // Одновременная передача и прием слов
 spi_error_t spi_transmit_receive_word(uint16_t tx_data, uint16_t *rx_data)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!rx_data) {
         return SPI_ERROR_PARAM;
     }
@@ -553,10 +611,13 @@ spi_error_t spi_transmit_receive_data(void* tx_data, void *rx_data, spi_data_siz
     }
 }
 
-
 // Отправка буфера
 spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!tx_buffer || size == 0) {
         return SPI_ERROR_PARAM;
     }
@@ -586,6 +647,10 @@ spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_s
 // Прием буфера
 spi_error_t spi_receive_buffer(void *rx_buffer, uint32_t size, spi_data_size_t size_in_bit)
 {
+    if (!is_initialized) {
+        return SPI_ERROR_BUSY;
+    }
+
     if (!rx_buffer || size == 0) {
         return SPI_ERROR_PARAM;
     }

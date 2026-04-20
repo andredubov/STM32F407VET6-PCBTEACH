@@ -15,7 +15,6 @@
 static bool is_initialized = false;
 
 static uint8_t sector_buffer[W25Q64_SECTOR_SIZE];
-// static uint8_t temp_buffer[W25Q64_SECTOR_SIZE];
 
 static bool is_sector_changed(const uint8_t* old_data, const uint8_t* new_data, uint32_t offset, uint32_t size) 
 {
@@ -775,11 +774,6 @@ w25q64_error_t w25q64_update_data(uint32_t address, uint8_t* new_data, uint32_t 
     return W25Q_OK;
 }
 
-w25q64_error_t w25q64_update_data_16(uint32_t address, uint16_t* new_data, uint32_t size)
-{
-    return W25Q_OK;
-}
-
 w25q64_error_t w25q64_update_byte(uint32_t address, uint8_t* new_data, uint32_t size)
 {
     w25q64_error_t w25q64_error;
@@ -1070,4 +1064,108 @@ void w25q64_print_jedec_id(void)
     );
 
     return;
+}
+
+// Специальная функция записи с переключением между 8-бит и 16-бит режимами
+w25q64_error_t w25q64_write_with_mode_switch(uint32_t address, uint8_t data1, uint16_t data2)
+{
+    spi_error_t spi_error;
+    w25q64_error_t w25q64_error;
+    uint8_t addr_bytes[3];
+    
+    if (address >= W25Q64_SIZE) {
+        return W25Q_ERROR_ADDRESS;
+    }
+
+    spi_disable();
+    spi_set_8bit_mode();
+    spi_enable();
+    
+    // Разбиваем адрес на байты
+    addr_bytes[0] = (address >> 16) & 0xFF;
+    addr_bytes[1] = (address >> 8) & 0xFF;
+    addr_bytes[2] = address & 0xFF;
+    
+    uart_printf_line("Writing with mode switch at address 0x%06X: data1=0x%02X, data2=0x%04X",
+        address, 
+        data1, 
+        data2
+    );
+    
+    // Включаем запись
+    w25q64_error = w25q64_write_enable();
+    if (w25q64_error != W25Q_OK) {
+        return w25q64_error;
+    }
+    
+    // === Начало SPI транзакции ===
+    spi_cs_select();
+    
+    // Отправляем команду Page Program (8-бит)
+    spi_error = spi_transmit_byte(W25Q_CMD_PAGE_PROGRAM);
+    if (spi_error != SPI_OK) {
+        spi_cs_deselect();
+        return W25Q_ERROR_SPI_COMMUNICATION;
+    }
+    
+    // Отправляем 24-битный адрес (8-бит режим)
+    for (int i = 0; i < 3; i++) {
+        spi_error = spi_transmit_byte(addr_bytes[i]);
+        if (spi_error != SPI_OK) {
+            spi_cs_deselect();
+            return W25Q_ERROR_SPI_COMMUNICATION;
+        }
+    }
+    
+    // Отправляем первый байт данных (0x01) в 8-бит режиме
+    uart_send_line("  Sending byte 0x01 (8-bit mode)");
+    spi_error = spi_transmit_byte(data1);
+    if (spi_error != SPI_OK) {
+        spi_cs_deselect();
+        return W25Q_ERROR_SPI_COMMUNICATION;
+    }
+
+    // === Переключаемся в 16-битный режим ===
+    uart_send_line("  Switching to 16-bit mode");
+    
+    // Отключаем SPI для изменения формата
+    spi_disable();
+    // Устанавливаем 16-битный режим
+    spi_set_16bit_mode();
+    // Включаем SPI обратно
+    spi_enable();
+    
+    // Отправляем два следующих байта (0x02 и 0x03) как одно 16-битное значение
+    // ВАЖНО: Порядок байт! W25Q64 ожидает старший байт первым (MSB first)
+    // Проверьте порядок байт в вашем протоколе
+    
+    uart_printf_line("  Sending uint16 0x%04X (16-bit mode)", data2);
+    spi_error = spi_transmit_word(data2);
+    if (spi_error != SPI_OK) {
+        spi_cs_deselect();
+        // Восстанавливаем 8-битный режим перед выходом
+        spi_disable();
+        spi_set_8bit_mode();
+        spi_enable();
+        return W25Q_ERROR_SPI_COMMUNICATION;
+    }
+    
+    // === Переключаемся обратно в 8-битный режим ===
+    uart_send_line("  Switching back to 8-bit mode");
+    spi_disable();
+    spi_set_8bit_mode();
+    spi_enable();
+
+    // Завершаем транзакцию
+    spi_cs_deselect();
+    
+    // Ждем завершения записи
+    w25q64_error = w25q64_wait_for_ready(W25Q64_PAGE_TIMEOUT_MS);
+    if (w25q64_error != W25Q_OK) {
+        return w25q64_error;
+    }
+    
+    uart_send_line("  Write completed successfully");
+    
+    return W25Q_OK;
 }

@@ -17,9 +17,7 @@ int main(void)
 
     __enable_irq();
 
-    save_led_id_into_eeprom(LED_1);
-    save_led_id_into_eeprom(LED_2);
-    save_led_id_into_eeprom(LED_3);
+    save_leds_ids_into_eeprom(LED_1, LED_2, LED_3);
 
     for (;;)
     {

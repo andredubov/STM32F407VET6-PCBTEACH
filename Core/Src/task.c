@@ -29,7 +29,6 @@ void save_pressed_button_into_eeprom(led_id_t led_id)
         return;
     }
 
-    // eeprom_offset = (eeprom_offset % (SAVE_POINT_CNT-1)) + 1;
     eeprom_offset = (eeprom_offset + 1) % SAVE_POINT_CNT;
 }
 

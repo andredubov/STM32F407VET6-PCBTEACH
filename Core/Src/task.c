@@ -108,7 +108,7 @@ void save_leds_ids_into_eeprom(led_id_t led_1_id, led_id_t led_2_id, led_id_t le
 
     w25q64_error = w25q64_write_with_mode_switch(target_address, led_1_id, data);
     if (w25q64_error != W25Q_OK) {
-        uart_printf_line("cannot read byte at 0x%06X", target_address);
+        uart_printf_line("cannot write data with SPI mode switch at 0x%06X", target_address);
     }
 }
 

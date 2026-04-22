@@ -3,7 +3,8 @@
 #include "button.h"
 #include "task.h"
 
-#define READING_LEDS_STATE_TIME_MS 1000
+#define READING_LEDS_STATE_TIME_MS              1000
+#define RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS     100
 
 volatile uint32_t system_tick = 1;
 volatile static event_id_t event_id = NONE;
@@ -12,10 +13,12 @@ void SysTick_Handler(void)
 {
     static uint8_t debounce_counter = 0;
     static uint16_t reading_leds_state_counter = 0;
+    static uint16_t reading_leds_ids_from_w25q64_counter = 0;
 
     system_tick++;
     debounce_counter++;
     reading_leds_state_counter++;
+    reading_leds_ids_from_w25q64_counter++;
 
     // Вызываем обработчик кнопок каждые DEBOUNCE_TIME_MS (10 мс)
     if (debounce_counter >= DEBOUNCE_TIME_MS) {
@@ -26,7 +29,12 @@ void SysTick_Handler(void)
     // Вызываем обработчик каждые READING_LEDS_STATE_TIME_MS (1 с)
     if (reading_leds_state_counter >= READING_LEDS_STATE_TIME_MS) {
         reading_leds_state_counter = 0;
-        event_id = RUNNING_LEDS_FROM_EEPROM;
+        event_id = RUNNING_LEDS_FROM_AT24C02_EVENT;
+    }
+
+    if (reading_leds_ids_from_w25q64_counter >= RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS) {
+        reading_leds_ids_from_w25q64_counter = 0;
+        event_id = RUNNING_LEDS_FROM_W25Q64_EVENT;
     }
 }
 
@@ -35,7 +43,7 @@ uint32_t get_tick_ms(void)
     return system_tick;
 }
 
-event_id_t get_event(void)
+event_id_t get_event_id(void)
 {
     event_id_t event = event_id;
     event_id = NONE;  // Сброс после чтения

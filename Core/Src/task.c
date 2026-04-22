@@ -8,10 +8,12 @@
 #include "uart.h"
 #include "task.h"
 #include "spi.h"
+#include "timer_capture.h"
 
 #define EEPROM_BASE_ADDRESS       0
 #define SAVE_POINT_CNT            5
 #define TIMEOUT_250ms           250
+#define TIMEOUT_100ms           100
 #define BUFFER_LENGTH             3
 #define BASE_ADDRESS       0x303030
 
@@ -147,4 +149,31 @@ void switch_on_led()
 {
     led_off(previous_led);
     led_on(current_led);
+}
+
+void start_time_measurement(void)
+{
+    reset_measurement();  // Сброс предыдущего измерения
+    timer2_start();      // Запуск TIM2 (предделитель)
+    timer1_start();      // Запуск TIM1 (захват)                
+    uart_send_line("Кнопка S1 нажата - таймеры запущены, начало измерения");
+}
+
+void stop_time_measurement(void)
+{
+    if ( is_measurement_complete() )
+    {
+        // Выводим результат измерения
+        uint32_t interval_ms = get_interval_ms();
+        float interval_seconds = get_interval_seconds();
+        uart_printf_line("Интервал между нажатиями: %u мс (%.3f с)", interval_ms, interval_seconds);
+        // Мигаем светодиодом для индикации завершения измерения
+        led_on(LED_1);
+        delay_ms(TIMEOUT_100ms);
+        led_off(LED_1);
+    }
+    else
+    {
+        uart_send_line("Кнопка S2 нажата, но измерение не начато (нажмите сначала кнопку S1)");
+    }
 }

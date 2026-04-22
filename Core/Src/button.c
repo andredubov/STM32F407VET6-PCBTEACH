@@ -106,7 +106,7 @@ void buttons_init(void)
     EXTI->RTSR |= (EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 
     // 8. Настроить NVIC
-    NVIC_SetPriority(EXTI15_10_IRQn, 0x0E);  // Средний приоритет
+    NVIC_SetPriority(EXTI15_10_IRQn, 0x0A);  // Средний приоритет
     NVIC_EnableIRQ(EXTI15_10_IRQn);
 
     // 9. Инициализация структур демпфирования

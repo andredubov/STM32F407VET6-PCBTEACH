@@ -1,4 +1,6 @@
 #include "main.h"
+#include "delay.h"
+#include "task.h"
 
 int main(void)
 {
@@ -14,10 +16,26 @@ int main(void)
     spi_init();     // настройка SPI (10.5 МГц до 133 МГц)
     at24c02_init(i2c_device_address); // иницилизация модуля для взаимодействия с микросхемой AT24C02B
     w25q64_init();  // иницилизация модуля для взаимодействия с микросхемой W25Q64
+    timer2_init_as_prescaler(); // TIM2 - предделитель (1 кГц)
+    timer1_init_in_capture_mode(); // TIM1 - захват входа
 
     __enable_irq();
 
-    save_leds_ids_into_eeprom(LED_1, LED_2, LED_3);
+    // Выводим инструкцию по UART
+    uart_send_line("=== Измеритель интервала между нажатиями S1 и S2 ===");
+    uart_send_line("Нажмите S1 для начала измерения");
+    uart_send_line("Нажмите S2 для окончания измерения");
+    uart_send_line("Результат будет выведен в capture (в миллисекундах)");
+    uart_send_line("");
+
+    // timer2_start();
+    // timer1_start();
+
+    // test_timer1_counting();
+    // diagnose_timer_connection();
+
+    debug_tim1_counting();
+    // debug_tim1_capture_pins();
 
     for (;;)
     {
@@ -25,22 +43,17 @@ int main(void)
 
         switch (button_event_id) {
             case BUTTON_1_PRESSED:
-                load_led_id_from_eeprom(LED_1);
-                uart_send_line("button S1 pressed");
+                start_time_measurement();
                 break;
             case BUTTON_2_PRESSED:
-                load_led_id_from_eeprom(LED_2);
-                uart_send_line("button S2 pressed");
+                stop_time_measurement();
                 break;
             case BUTTON_3_PRESSED:
-                load_led_id_from_eeprom(LED_3);
                 uart_send_line("button S3 pressed");
                 break;
             default:
                 break;
         }
-
-        switch_on_led();
 
         command_id_t command_id = get_command_id();
 

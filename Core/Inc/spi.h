@@ -82,7 +82,6 @@ spi_error_t spi_transmit_data(void *data, spi_data_size_t size_in_bit);
 spi_error_t spi_receive_data(void *data, spi_data_size_t size_in_bit);
 
 spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit);
-spi_error_t spi_transmit_buffer(const void *tx_buffer, uint32_t size, spi_data_size_t size_in_bit);
 spi_error_t spi_transmit_receive_buffer(
     const void *tx_buffer,
     void *rx_buffer,

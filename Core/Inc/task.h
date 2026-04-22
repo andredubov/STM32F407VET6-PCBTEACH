@@ -13,4 +13,7 @@ void save_leds_ids_into_eeprom(led_id_t led_1_id, led_id_t led_2_id, led_id_t le
 void load_led_id_from_eeprom(led_id_t led_id);
 void switch_on_led();
 
+void start_time_measurement(void);
+void stop_time_measurement(void);
+
 #endif // TASK_H

@@ -4,10 +4,11 @@
 #include <stdint.h>
 
 typedef enum {
-    RUNNING_LEDS_FROM_EEPROM = 1,
+    RUNNING_LEDS_FROM_AT24C02_EVENT = 1,
+    RUNNING_LEDS_FROM_W25Q64_EVENT = 2,
 } event_id_t;
 
-event_id_t get_event(void);
+event_id_t get_event_id(void);
 
 void delay_init(uint32_t frequency_hz);
 void delay_ms(uint32_t milliseconds);

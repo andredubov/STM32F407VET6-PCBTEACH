@@ -12,3 +12,4 @@
 #include "w25q64.h"
 #include "command.h"
 #include "task.h"
+#include "timer_capture.h"

@@ -153,32 +153,20 @@ void switch_on_led()
 
 void start_time_measurement(void)
 {
-    // reset_measurement();  // Сброс предыдущего измерения
-    // timer2_start();       // Запуск TIM2 (предделитель)
-    // timer1_start();       // Запуск TIM1 (захват)
-    // uart_send_line("Кнопка S2 нажата - запуск измрения времени");
-    // uart_printf_line("\n✅ Measurement started: press S2 again to measure interval");
+    reset_time_measurement();  // Сброс предыдущего измерения
+    uart_printf_line("\n✅ Measurement started: press S2 again to measure interval");
 }
 
-void stop_time_measurement(void)
+void get_time_measurement(void)
 {
-    // Выводим результат измерения
-    // uint32_t interval_ms = get_interval_ms();
-    // float interval_seconds = get_interval_seconds();
-    // uart_printf_line("📊 Interval: %u мс (%.3f с)", interval_ms, interval_seconds);
-
-    // Мигаем светодиодом для индикации завершения измерения
-    led_on(LED_1);
-    delay_ms(TIMEOUT_100ms);
-    led_off(LED_1);
-}
-
-void measure_time(void)
-{
-    bool is_completed = is_measurement_completed();
-
-    if (is_completed) 
-    {
-        stop_time_measurement();
+    bool is_completed = is_time_measurement_completed();
+    
+    if (is_completed) {
+        // Выводим результат измерения
+        uint32_t interval_ms = get_interval_ms();
+        float interval_seconds = get_interval_seconds();
+        uart_printf_line("📊 Interval: %u мс (%.3f с)", interval_ms, interval_seconds);
+    } else {
+        uart_send_line("⚠️ Measurement already done, ignoring");
     }
 }

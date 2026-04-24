@@ -2,6 +2,7 @@
 #include "delay.h"
 #include "button.h"
 #include "task.h"
+#include "critical_section.h"
 
 #define READING_LEDS_STATE_TIME_MS              1000
 #define RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS     100
@@ -11,6 +12,8 @@ volatile static event_id_t event_id = NONE;
 
 void SysTick_Handler(void)
 {
+    uint32_t basepri = critical_enter_basp(); // SysTick - самый высокий приоритет, используем BASEPRI
+
     static uint8_t debounce_counter = 0;
     static uint16_t reading_leds_state_counter = 0;
     static uint16_t reading_leds_ids_from_w25q64_counter = 0;
@@ -36,17 +39,31 @@ void SysTick_Handler(void)
         reading_leds_ids_from_w25q64_counter = 0;
         event_id = RUNNING_LEDS_FROM_W25Q64_EVENT;
     }
+
+    critical_exit_basp(basepri);
 }
 
 uint32_t get_tick_ms(void)
 {
-    return system_tick;
+    uint32_t tick;
+    
+    // Защищаем чтение 32-битной переменной (атомарность не гарантирована)
+    CRITICAL_SECTION_START();
+    tick = system_tick;
+    CRITICAL_SECTION_END();
+    
+    return tick;
 }
 
 event_id_t get_event_id(void)
 {
-    event_id_t event = event_id;
-    event_id = NONE;  // Сброс после чтения
+    event_id_t event;
+    
+    CRITICAL_SECTION_START();
+    event = event_id;
+    event_id = NONE;
+    CRITICAL_SECTION_END();
+    
     return event;
 }
 
@@ -61,8 +78,8 @@ void delay_init(uint32_t frequency_hz)
     // Расчёт для прерывания каждые 1 мс
     uint32_t reload_value = (frequency_hz / 1000) - 1; // 84000 - 1 = 83999
     
-    if (reload_value > 0xFFFFFF) {
-        reload_value = 0xFFFFFF;  // максимальное значение
+    if (reload_value > SYSTEM_TIMER_MAX_VALUE) {
+        reload_value = SYSTEM_TIMER_MAX_VALUE;  // максимальное значение
     }
     
     SysTick->LOAD = reload_value;
@@ -72,11 +89,25 @@ void delay_init(uint32_t frequency_hz)
     NVIC_SetPriority(SysTick_IRQn, 0x0F);
 }
 
+// void delay_ms(uint32_t milliseconds)
+// {
+//     uint32_t start_tick = system_tick;
+
+//     while ( (system_tick - start_tick) < milliseconds ) {
+//         __NOP();  // Ожидание прерывания (экономит энергию)
+//     }
+// }
+
 void delay_ms(uint32_t milliseconds)
 {
-    uint32_t start_tick = system_tick;
-
-    while ( (system_tick - start_tick) < milliseconds ) {
-        __NOP();  // Ожидание прерывания (экономит энергию)
+    uint32_t start_tick = get_tick_ms();
+    uint32_t elapsed;
+    
+    while (1) {
+        elapsed = get_tick_ms() - start_tick;
+        if (elapsed >= milliseconds) {
+            break;
+        }
+        __NOP();
     }
 }

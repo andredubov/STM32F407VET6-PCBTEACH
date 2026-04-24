@@ -1,6 +1,7 @@
 #include "stm32f407xx.h"
 #include "button.h"
 #include "delay.h"
+#include "critical_section.h"
 
 // Константы для демпфирования
 #define DEBOUNCE_COUNTER_MAX 5      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
@@ -11,8 +12,11 @@ volatile uint8_t button_raw_state[3] = {0};  // сырое состояние и
 
 button_event_t get_button_event(void)
 {
+    CRITICAL_SECTION_START();
     button_event_t event = button_event;
     button_event = NONE; // Сбрасываем событие после чтения
+    CRITICAL_SECTION_END();
+
     return event;
 }
 
@@ -20,6 +24,9 @@ button_event_t get_button_event(void)
 void EXTI15_10_IRQHandler(void)
 {
     uint32_t pr = EXTI->PR;
+
+    // Используем BASEPRI для быстрой защиты (не отключаем SysTick)
+    uint32_t basepri = critical_enter_basp();
 
     if (pr & EXTI_PR_PR10) {
         // Читаем реальное состояние пина
@@ -36,11 +43,15 @@ void EXTI15_10_IRQHandler(void)
         button_raw_state[2] = !(GPIOE->IDR & GPIO_IDR_IDR_12);
         EXTI->PR = EXTI_PR_PR12;
     }
+
+    critical_exit_basp(basepri);
 }
 
 // Обработчик демпфирования - вызывать периодически (например, каждые 10 мс из таймера)
 void buttons_debounce_handler(void)
 {
+    CRITICAL_SECTION_START();
+
     for (int i = 0; i < 3; i++) {
         // Проверяем сырое состояние из прерывания
         if (button_raw_state[i]) {
@@ -68,6 +79,8 @@ void buttons_debounce_handler(void)
             button_debounce.button_state[i] = 0;
         }
     }
+
+    CRITICAL_SECTION_END();
 }
 
 void buttons_init(void)
@@ -106,9 +119,10 @@ void buttons_init(void)
     EXTI->RTSR |= (EXTI_RTSR_TR10 | EXTI_RTSR_TR11 | EXTI_RTSR_TR12);
 
     // 8. Настроить NVIC
-    // NVIC_SetPriority(EXTI15_10_IRQn, 0x0A);  // Средний приоритет
+    NVIC_SetPriority(EXTI15_10_IRQn, 0x0B);  // Средний приоритет
     NVIC_EnableIRQ(EXTI15_10_IRQn);
 
+    CRITICAL_SECTION_START();
     // 9. Инициализация структур демпфирования
     for (int i = 0; i < 3; i++) {
         button_debounce.debounce_counter[i] = 0;
@@ -116,4 +130,6 @@ void buttons_init(void)
         button_debounce.button_pressed_flag[i] = 0;
         button_raw_state[i] = 0;
     }
+    button_event = NONE;
+    CRITICAL_SECTION_END();
 }

@@ -7,6 +7,7 @@
 #include "delay.h"
 #include "button.h"
 #include "uart.h"
+#include "critical_section.h"
 
 
 // Частота APB2 для USART1 (42 МГц после настройки RCC)
@@ -278,6 +279,8 @@ void USART1_IRQHandler(void)
 {
     if ( 0 != (USART1->SR & USART_SR_RXNE) )
     {
+        uint32_t basepri = critical_enter_basp(); // Используем BASEPRI для быстрой защиты
+
         uint8_t received_data = (uint8_t) (USART1->DR & (uint8_t)0xFF);
 
         switch (received_data) {
@@ -300,12 +303,27 @@ void USART1_IRQHandler(void)
                 command_id = CMD_NONE;
                 break;
         }
+
+        critical_exit_basp(basepri);
+    }
+
+    // Обработка ошибок UART
+    if (USART1->SR & (USART_SR_ORE | USART_SR_FE | USART_SR_NE)) {
+        // Сброс ошибок
+        volatile uint32_t temp = USART1->SR;
+        temp = USART1->DR;
+        (void)temp;
     }
 }
 
 command_id_t get_command_id(void)
 {
-    command_id_t cmd = command_id;
-    command_id = CMD_NONE;  // Сброс после чтения
+    command_id_t cmd;
+    
+    CRITICAL_SECTION_START();
+    cmd = command_id;
+    command_id = CMD_NONE;
+    CRITICAL_SECTION_END();
+    
     return cmd;
 }

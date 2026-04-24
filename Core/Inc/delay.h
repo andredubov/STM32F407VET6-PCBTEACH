@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define SYSTEM_TIMER_MAX_VALUE  0xFFFFFF
+
 typedef enum {
     RUNNING_LEDS_FROM_AT24C02_EVENT = 1,
     RUNNING_LEDS_FROM_W25Q64_EVENT = 2,

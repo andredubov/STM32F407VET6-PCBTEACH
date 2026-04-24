@@ -14,7 +14,6 @@ void load_led_id_from_eeprom(led_id_t led_id);
 void switch_on_led();
 
 void start_time_measurement(void);
-void stop_time_measurement(void);
-void measure_time(void);
+void get_time_measurement(void);
 
 #endif // TASK_H

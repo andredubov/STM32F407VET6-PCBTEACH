@@ -5,8 +5,9 @@
 #include "uart.h"
 #include "delay.h"
 
-#define APB1_FREQUENCY 42000000UL
-#define APB2_FREQUENCY 42000000UL
+#define APB1_FREQUENCY  42000000UL
+#define APB2_FREQUENCY  42000000UL
+#define DEBOUNCE_TIMEOUT_MS  200UL
 
 // Глобальная переменная для отладки (интервал в миллисекундах)
 volatile uint32_t capture = 0;
@@ -16,6 +17,7 @@ static volatile uint32_t first_capture = 0;
 static volatile uint32_t second_capture = 0;
 static volatile bool measurement_started = false;
 static volatile bool measurement_done = false;
+static volatile uint32_t last_capture_time = 0;  // Для защиты от дребезга
 
 // Функция инициализации TIM2 как предделителя (только настройка, без включения)
 void timer2_init_as_prescaler(void)
@@ -28,8 +30,7 @@ void timer2_init_as_prescaler(void)
     TIM2->DIER = 0;
     TIM2->SR = 0;
     TIM2->CNT = 0;
-    
-    // ВАЖНО: установите ARR в 1
+
     TIM2->ARR = 1;
     
     // PSC = 41999 для получения 1 кГц
@@ -43,10 +44,10 @@ void timer2_init_as_prescaler(void)
     
     // Генерация TRGO при обновлении (Update event)
     TIM2->CR2 &= ~TIM_CR2_MMS;
-    TIM2->CR2 |= TIM_CR2_MMS_1;  // MMS = 010
+    TIM2->CR2 |= TIM_CR2_MMS_1;  // MMS = 010 (Update event used as TRGO)
     
-    // uart_send_line("TIM2 initialized as prescaler");
-    // uart_printf_line("  PSC = %lu, ARR = %lu", TIM2->PSC, TIM2->ARR);
+    uart_send_line("TIM2 initialized as prescaler");
+    uart_printf_line("  PSC = %lu, ARR = %lu", TIM2->PSC, TIM2->ARR);
 }
 
 // Функция инициализации TIM1 в режиме захвата входа (только настройка, без включения)
@@ -65,11 +66,9 @@ void timer1_init_in_capture_mode(void)
     
     // 3. Настройка TIM1 на работу от TIM2_TRGO (ITR1)
     // Сначала очищаем биты SMS и TS
-    TIM1->SMCR &= ~(TIM_SMCR_SMS | TIM_SMCR_TS);
-    
+    TIM1->SMCR &= ~(TIM_SMCR_SMS | TIM_SMCR_TS);    
     // Устанавливаем External Clock Mode 1 (SMS = 0b111)
-    TIM1->SMCR |= (TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1 | TIM_SMCR_SMS_0);  // SMS = 7
-    
+    TIM1->SMCR |= (TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1 | TIM_SMCR_SMS_0);  // SMS = 111 (External Clock Mode 1)
     // Выбираем источник ITR1 (TIM2_TRGO) - TS = 0b001
     TIM1->SMCR |= TIM_SMCR_TS_0;  // Бит 4 = 1
     
@@ -80,21 +79,12 @@ void timer1_init_in_capture_mode(void)
     
     // 4. Настройка GPIO для кнопок
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
-    
-    // PE10 -> TIM1_CH3 (S1)
-    GPIOE->MODER &= ~GPIO_MODER_MODER10;
-    GPIOE->MODER |= GPIO_MODER_MODER10_1; // Alternate function
-    GPIOE->AFR[1] &= ~GPIO_AFRH_AFSEL10;
-    GPIOE->AFR[1] |= (1 << GPIO_AFRH_AFSEL10_Pos); // AF1 for TIM1_CH2
-    GPIOE->PUPDR &= ~GPIO_PUPDR_PUPDR10;
-    GPIOE->PUPDR |= GPIO_PUPDR_PUPDR10_0;  // Pull-up
-    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR10; // High speed
-    
+
     // PE11 -> TIM1_CH2 (S2)
     GPIOE->MODER &= ~GPIO_MODER_MODER11;
     GPIOE->MODER |= GPIO_MODER_MODER11_1; // Alternate function
     GPIOE->AFR[1] &= ~GPIO_AFRH_AFSEL11;
-    GPIOE->AFR[1] |= (1 << GPIO_AFRH_AFSEL11_Pos); // AF1 for TIM1_CH3
+    GPIOE->AFR[1] |= GPIO_AFRH_AFSEL11_0; // AF1 for TIM1_CH2
     GPIOE->PUPDR &= ~GPIO_PUPDR_PUPDR11;
     GPIOE->PUPDR |= GPIO_PUPDR_PUPDR11_0;  // Pull-up
     GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR11;  // High speed
@@ -102,33 +92,24 @@ void timer1_init_in_capture_mode(void)
     // 5. Настройка захвата
     // Сначала очищаем все биты
     TIM1->CCER &= ~(TIM_CCER_CC2E | TIM_CCER_CC2P | TIM_CCER_CC2NP);
-    TIM1->CCER &= ~(TIM_CCER_CC3E | TIM_CCER_CC3P | TIM_CCER_CC3NP);
 
     // Режим входов - установить CC2S и CC3S в 0b01
     TIM1->CCMR1 &= ~TIM_CCMR1_CC2S;
     TIM1->CCMR1 |= TIM_CCMR1_CC2S_0;       // CC2S = 01 (вход)
-    
-    TIM1->CCMR2 &= ~TIM_CCMR2_CC3S;
-    TIM1->CCMR2 |= TIM_CCMR2_CC3S_0;       // CC3S = 01 (вход)
 
     // Фильтр для подавления дребезга (8 выборок)
-    TIM1->CCMR1 |= (6 << TIM_CCMR1_IC2F_Pos);
-    TIM1->CCMR2 |= (6 << TIM_CCMR2_IC3F_Pos);
+    TIM1->CCMR1 |= (0x0F << TIM_CCMR1_IC2F_Pos);
     
     // Настройка канала 2 (S2) - захват по спаду
     TIM1->CCER |= TIM_CCER_CC2P;           // CC2P=1 (захват по спаду)
     TIM1->CCER |= TIM_CCER_CC2E;           // Включить захват
-    
-    // Настройка канала 3 (S1) - захват по спаду  
-    TIM1->CCER |= TIM_CCER_CC3P;           // CC3P=1 (захват по спаду)
-    TIM1->CCER |= TIM_CCER_CC3E;           // Включить захват    
-    
+
     // 6. Включить прерывания
     TIM1->DIER |= TIM_DIER_CC2IE;
-    TIM1->DIER |= TIM_DIER_CC3IE;
+    // TIM1->DIER |= TIM_DIER_CC3IE;
     
     // 7. Настройка NVIC
-    NVIC_SetPriority(TIM1_CC_IRQn, 0x0B);
+    // NVIC_SetPriority(TIM1_CC_IRQn, 0x0C);
     NVIC_EnableIRQ(TIM1_CC_IRQn);
     
     uart_send_line("TIM1 initialized with falling edge capture");
@@ -156,10 +137,41 @@ void timer2_reset_counter(void)
     TIM2->CNT = 0;
 }
 
+void timer2_reset(void)
+{
+    // Остановить таймер
+    TIM2->CR1 &= ~TIM_CR1_CEN;
+    
+    // Сбросить счетчик
+    TIM2->CNT = 0;
+    
+    // Сбросить флаги прерываний
+    TIM2->SR = 0;
+    
+    // Запустить заново
+    TIM2->CR1 |= TIM_CR1_CEN;
+}
+
+void timer1_reset(void)
+{
+    // Остановить таймер
+    TIM1->CR1 &= ~TIM_CR1_CEN;
+    
+    // Сбросить счетчик
+    TIM1->CNT = 0;
+    
+    // Сбросить флаги прерываний
+    TIM1->SR = 0;
+    
+    // Запустить заново
+    TIM1->CR1 |= TIM_CR1_CEN;
+}
+
 // Запуск TIM1
 void timer1_start(void)
 {
     TIM1->CNT = 0;              // Сброс счетчика
+
     TIM1->CR1 |= TIM_CR1_CEN;   // Включить TIM1
 }
 
@@ -167,6 +179,7 @@ void timer1_start(void)
 void timer1_stop(void)
 {
     TIM1->CR1 &= ~TIM_CR1_CEN;  // Выключить TIM1
+
     TIM1->CNT = 0;              // Сброс счетчика
 }
 
@@ -176,53 +189,84 @@ void timer1_reset_counter(void)
     TIM1->CNT = 0;
 }
 
-// Временная отладочная версия обработчика
+// Обработчик прерываний с защитой от дребезга
 void TIM1_CC_IRQHandler(void)
 {
-    // Захват по каналу 3 (PE10 - S1)
-    if (TIM1->SR & TIM_SR_CC3IF)
-    {        
-        uart_send_line("DEBUG: CC3 interrupt (S1 pressed)");  // <-- ДОБАВИТЬ
-        
-        if (!measurement_started)
-        {
-            first_capture = TIM1->CCR3;
-            measurement_started = true;
-            measurement_done = false;
-            uart_printf_line("DEBUG: first_capture = %lu", first_capture);  // <-- ДОБАВИТЬ
-        }
-
-        TIM1->SR &= ~(TIM_SR_CC3IF);
-    }
-    
-    // Захват по каналу 2 (PE11 - S2)
     if (TIM1->SR & TIM_SR_CC2IF)
     {
-        uart_send_line("DEBUG: CC2 interrupt (S2 pressed)");  // <-- ДОБАВИТЬ
+        uint32_t current_time = TIM1->CCR2;
+        uint32_t now = get_tick_ms();
+        uint32_t timeout;
         
-        if (measurement_started && !measurement_done)
+        // ✅ Защита от дребезга: игнорируем нажатия чаще чем через 50 мс
+        if (now >= last_capture_time) {
+            timeout = now - last_capture_time;
+        } else {
+            timeout = (0xFFFFFF - last_capture_time) + now;
+        }
+
+        if (timeout < DEBOUNCE_TIMEOUT_MS) {
+            TIM1->SR &= ~TIM_SR_CC2IF;
+            return;
+        }
+        last_capture_time = now;
+
+        if (!measurement_started)
         {
-            second_capture = TIM1->CCR2;
-            // uart_printf_line("DEBUG: second_capture = %lu", second_capture);  // <-- ДОБАВИТЬ
+            // ✅ Новое измерение
+            // Останавливаем таймеры для сброса
+            TIM2->CR1 &= ~TIM_CR1_CEN;
+            TIM1->CR1 &= ~TIM_CR1_CEN;
             
+            // Сбрасываем счетчики
+            TIM2->CNT = 0;
+            TIM1->CNT = 0;
+            TIM1->SR = 0;
+            TIM2->SR = 0;
+            
+            // Запускаем таймеры заново
+            TIM2->CR1 |= TIM_CR1_CEN;
+            TIM1->CR1 |= TIM_CR1_CEN;
+            
+            first_capture = 0;  // Так как счетчик сброшен
+            measurement_started = true;
+            measurement_done = false;
+            
+            uart_printf_line("\n✅ Measurement started: press S2 again to measure interval");
+        }
+        else if (!measurement_done)
+        {
+            // ✅ Завершаем измерение
+            second_capture = current_time;
+            
+            // Расчет интервала с учетом переполнения
             if (second_capture >= first_capture)
             {
                 capture = second_capture - first_capture;
             }
             else
             {
-                capture = (TIM1->ARR - first_capture) + second_capture;
+                capture = (0xFFFF - first_capture) + second_capture;
             }
 
-            uart_printf_line("DEBUG: capture = %lu ms", capture);  // <-- ДОБАВИТЬ
-
             measurement_done = true;
-            timer1_stop();
-            timer2_stop();
+            measurement_started = false;
+            
+            // Останавливаем таймеры
+            TIM2->CR1 &= ~TIM_CR1_CEN;
+            TIM1->CR1 &= ~TIM_CR1_CEN;
+
+            uart_printf_line("📊 Interval: %lu ms (%lu.%03lu sec) [first=%lu, second=%lu]", 
+                capture,
+                capture / 1000,
+                capture % 1000,
+                first_capture, 
+                second_capture
+            );
         }
         else
         {
-            uart_send_line("DEBUG: S2 ignored - measurement not started or already done");  // <-- ДОБАВИТЬ
+            uart_send_line("⚠️ Measurement already done, ignoring");
         }
 
         TIM1->SR &= ~TIM_SR_CC2IF;
@@ -232,7 +276,7 @@ void TIM1_CC_IRQHandler(void)
 // Получить интервал в секундах
 float get_interval_seconds(void)
 {
-    return (float)capture / 1000.0f;
+    return (float) capture / 1000.0;
 }
 
 // Получить интервал в миллисекундах
@@ -242,22 +286,40 @@ uint32_t get_interval_ms(void)
 }
 
 // Проверить, завершено ли измерение
-bool is_measurement_complete(void)
+bool is_measurement_completed(void)
 {
     return measurement_done;
 }
 
 // Сбросить измерение для следующей пары нажатий
+// Исправленная функция сброса измерения
 void reset_measurement(void)
 {
+    bool tim2_was_running = (TIM2->CR1 & TIM_CR1_CEN) != 0;
+    bool tim1_was_running = (TIM1->CR1 & TIM_CR1_CEN) != 0;
+    
     measurement_started = false;
     measurement_done = false;
     first_capture = 0;
     second_capture = 0;
+    capture = 0;
     
-    // Останавливаем таймеры, если они были запущены
-    timer1_stop();
-    timer2_stop();
+    // Сбрасываем таймеры, сохраняя их состояние
+    if (tim2_was_running) {
+        TIM2->CR1 &= ~TIM_CR1_CEN;
+        TIM2->CNT = 0;
+        TIM2->CR1 |= TIM_CR1_CEN;
+    } else {
+        TIM2->CNT = 0;
+    }
+    
+    if (tim1_was_running) {
+        TIM1->CR1 &= ~TIM_CR1_CEN;
+        TIM1->CNT = 0;
+        TIM1->CR1 |= TIM_CR1_CEN;
+    } else {
+        TIM1->CNT = 0;
+    }
 }
 
 void test_timer2(void)
@@ -414,6 +476,10 @@ void test_timer2_output(void)
 void debug_tim1_counting(void)
 {
     uart_send_line("\n=== TIM1 Debug ===");
+
+    // Останавливаем таймеры, если они были запущены
+    timer1_stop();
+    timer2_stop();
     
     // Запускаем TIM2 и TIM1
     timer2_start();
@@ -431,7 +497,6 @@ void debug_tim1_counting(void)
     timer1_stop();
     timer2_stop();
 }
-
 
 void debug_tim1_capture_pins(void)
 {

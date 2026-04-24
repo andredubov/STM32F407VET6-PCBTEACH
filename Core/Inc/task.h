@@ -15,5 +15,6 @@ void switch_on_led();
 
 void start_time_measurement(void);
 void stop_time_measurement(void);
+void measure_time(void);
 
 #endif // TASK_H

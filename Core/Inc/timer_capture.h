@@ -30,7 +30,7 @@ float get_interval_seconds(void);
 uint32_t get_interval_ms(void);
 
 // Проверить, было ли измерение завершено
-bool is_measurement_complete(void);
+bool is_measurement_completed(void);
 
 // Сбросить измерение для следующей пары нажатий
 void reset_measurement(void);

@@ -278,7 +278,7 @@ void USART1_IRQHandler(void)
 {
     if ( 0 != (USART1->SR & USART_SR_RXNE) )
     {
-        uint16_t received_data = (uint16_t) (USART1->DR & (uint16_t)0x1FF);
+        uint8_t received_data = (uint8_t) (USART1->DR & (uint8_t)0xFF);
 
         switch (received_data) {
             case '0':

@@ -9,6 +9,8 @@
 #include "task.h"
 #include "spi.h"
 #include "timer_capture.h"
+#include "adc.h"
+#include "stm32f407xx.h"
 
 #define EEPROM_BASE_ADDRESS       0
 #define SAVE_POINT_CNT            5

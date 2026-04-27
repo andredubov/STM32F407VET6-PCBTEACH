@@ -13,3 +13,4 @@
 #include "command.h"
 #include "task.h"
 #include "timer_capture.h"
+#include "adc.h"

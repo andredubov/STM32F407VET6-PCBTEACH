@@ -47,8 +47,8 @@ void timer2_init_as_prescaler(void)
     // Генерация TRGO при обновлении (Update event)
     TIM2->CR2 &= ~TIM_CR2_MMS;
     TIM2->CR2 |= TIM_CR2_MMS_1;  // MMS = 010 (Update event used as TRGO)
-    
-    uart_send_line("TIM2 initialized as prescaler");
+
+    uart_printf_line("TIM2 initialized as prescaler (1 kHz)");
 }
 
 // Функция инициализации TIM1 в режиме захвата входа (только настройка, без включения)
@@ -121,6 +121,7 @@ void timer2_start(void)
 {
     TIM2->CNT = 0;             // Сброс счетчика
     TIM2->CR1 |= TIM_CR1_CEN;  // Включить TIM2
+    uart_send_line("TIM2 started (1 kHz)");
 }
 
 // Остановка TIM2
@@ -128,6 +129,7 @@ void timer2_stop(void)
 {
     TIM2->CR1 &= ~(TIM_CR1_CEN);    // Выключить TIM2
     TIM2->CNT = 0;                  // Сброс счетчика
+    uart_send_line("TIM2 stopped");
 }
 
 void timer2_reset(void)

@@ -1,6 +1,4 @@
 #include "main.h"
-#include "delay.h"
-#include "task.h"
 
 int main(void)
 {
@@ -18,6 +16,9 @@ int main(void)
     w25q64_init();  // иницилизация модуля для взаимодействия с микросхемой W25Q64
     timer2_init_as_prescaler(); // TIM2 - предделитель (1 кГц)
     timer1_init_in_capture_mode(); // TIM1 - захват входа
+    adc_init();
+
+    adc_start();  // Запуск ADC
 
     __enable_irq();
 
@@ -33,7 +34,30 @@ int main(void)
                 get_time_measurement();
                 break;
             case BUTTON_3_PRESSED:
-                uart_send_line("button S3 pressed");
+                uart_send_line("button S3 pressed");             
+                break;
+            default:
+                break;
+        }
+
+        adc_event_t adc_event = get_adc_event();
+
+        switch (adc_event) {
+            case ADC_EVENT_WATCHDOG_TRIGGERED:
+                led_on(LED_1);
+                uart_send_line("⚠️ ADC Watchdog: Voltage out of range [10%..80%]!");                
+                break;
+            case ADC_EVENT_HIGH_THRESHOLD:
+                led_on(LED_1);
+                uart_send_line("⚠️ ADC Watchdog: Voltage above 80% threshold!");
+                break;
+            case ADC_EVENT_LOW_THRESHOLD:
+                led_on(LED_1);
+                uart_send_line("⚠️ ADC Watchdog: Voltage below 10% threshold!");
+                break;
+            case ADC_EVENT_WATCHDOG_NORMAL:
+                led_off(LED_1);
+                uart_send_line("✅ ADC Watchdog: Voltage back to normal range");
                 break;
             default:
                 break;

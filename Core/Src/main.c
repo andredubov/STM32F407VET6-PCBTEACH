@@ -43,20 +43,17 @@ int main(void)
         adc_event_t adc_event = get_adc_event();
 
         switch (adc_event) {
-            case ADC_EVENT_WATCHDOG_TRIGGERED:
-                led_on(LED_1);
-                uart_send_line("⚠️ ADC Watchdog: Voltage out of range [10%..80%]!");                
-                break;
             case ADC_EVENT_HIGH_THRESHOLD:
                 led_on(LED_1);
                 uart_send_line("⚠️ ADC Watchdog: Voltage above 80% threshold!");
                 break;
             case ADC_EVENT_LOW_THRESHOLD:
-                led_on(LED_1);
+                led_on(LED_2);
                 uart_send_line("⚠️ ADC Watchdog: Voltage below 10% threshold!");
                 break;
             case ADC_EVENT_WATCHDOG_NORMAL:
                 led_off(LED_1);
+                led_off(LED_2);
                 uart_send_line("✅ ADC Watchdog: Voltage back to normal range");
                 break;
             default:

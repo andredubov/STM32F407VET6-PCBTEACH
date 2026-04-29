@@ -1,5 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+#include "stm32f407xx.h"
 #include "at24c02.h"
 #include "button.h"
 #include "w25q64.h"
@@ -10,7 +12,7 @@
 #include "spi.h"
 #include "timer_capture.h"
 #include "adc.h"
-#include "stm32f407xx.h"
+#include "dma.h"
 
 #define EEPROM_BASE_ADDRESS       0
 #define SAVE_POINT_CNT            5
@@ -171,4 +173,59 @@ void get_time_measurement(void)
     } else {
         uart_send_line("⚠️ Measurement already done, ignoring");
     }
+}
+
+enum {
+    BUFFER_LENGTH_1 = 8
+};
+
+uint8_t src[BUFFER_LENGTH_1];//    __attribute__ ((section(".bss")));
+uint8_t dst[BUFFER_LENGTH_1];//    __attribute__ ((section(".bss")));
+
+
+// void example_memcpy_v2(void)
+// {
+//     // Заполняем исходный массив тестовыми данными
+//     for(int i = 0; i < BUFFER_LENGTH_1; i++) {
+//         src[i] = (uint8_t) i;
+//     }
+//     // Инициализируем DMA2
+//     DMA2_MemToMem_Init(src, dst, BUFFER_LENGTH_1);
+//     // Запускаем передачу
+//     DMA2_StartTransfer();
+//     // Ожидаем завершения (или работаем в прерывании)
+//     while(!DMA2_IsTransferComplete());
+
+//     if (memcmp(src, dst, BUFFER_LENGTH_1) != 0) {
+//         uart_send_line("❌ DMA memcpy verification failed");
+//         return;
+//     }
+
+//     uart_send_line("✓ DMA memcpy successful!");
+// }
+
+void example_memcpy(void) 
+{
+    for (int i = 0; i < BUFFER_LENGTH_1; i++) {
+        src[i] = (uint8_t) i;
+    }
+
+    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst, src, BUFFER_LENGTH_1);
+    if (dma_error != DMA_OK) {
+        uart_printf_line("❌ DMA memcpy failed to start: error %d", dma_error);
+        return;
+    }
+
+    dma_error = dma_wait(DMA2_STREAM_0, 2000);
+    if (dma_error != DMA_OK) {
+        uart_printf_line("❌ DMA wait failed: error %d", dma_error);
+        return;
+    }
+
+    if (memcmp(src, dst, BUFFER_LENGTH_1) != 0) {
+        uart_send_line("❌ DMA memcpy verification failed");
+        return;
+    }
+
+    uart_send_line("✓ DMA memcpy successful!");
 }

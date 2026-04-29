@@ -14,3 +14,4 @@
 #include "task.h"
 #include "timer_capture.h"
 #include "adc.h"
+#include "dma.h"

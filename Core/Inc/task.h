@@ -16,4 +16,6 @@ void switch_on_led();
 void start_time_measurement(void);
 void get_time_measurement(void);
 
+void example_memcpy(void);
+
 #endif // TASK_H

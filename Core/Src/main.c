@@ -1,26 +1,48 @@
 #include "main.h"
 
-int main(void)
+void system_init(void)
 {
-    uint32_t mcu_frequency_hz = 84000000u; // 84 МГц
+    uint32_t mcu_frequency_hz = 84000000u;
     uint8_t i2c_device_address = 0xA0;
 
-    rcc_init();     // настройка тактирования
-    delay_init(mcu_frequency_hz); // настройка SysTick
-    leds_init();    // настройка светодиодов
-    buttons_init(); // настройка кнопок
-    uart_init();    // настройка UART (по умолчанию 115200)
-    i2c_init();     // настройка I2C (100 кГц)
-    spi_init();     // настройка SPI (10.5 МГц до 133 МГц)
-    at24c02_init(i2c_device_address); // иницилизация модуля для взаимодействия с микросхемой AT24C02B
-    w25q64_init();  // иницилизация модуля для взаимодействия с микросхемой W25Q64
-    timer2_init_as_prescaler(); // TIM2 - предделитель (1 кГц)
-    timer1_init_in_capture_mode(); // TIM1 - захват входа
+    rcc_init();
+    delay_init(mcu_frequency_hz);
+    leds_init();
+    buttons_init();
+    uart_init();
+    i2c_init();
+    spi_init();
+    at24c02_init(i2c_device_address);
+    w25q64_init();
+    timer2_init_as_prescaler();
+    timer1_init_in_capture_mode();
     adc_init();
+    dma_init();
+}
 
-    adc_start();  // Запуск ADC
+void print_banner(void)
+{
+    uart_send_line("\r\n=========================================");
+    uart_send_line("   STM32F407 System Ready");
+    uart_send_line("=========================================");
+    uart_send_line("Commands:");
+    uart_send_line("  '1' '2' '3' - Turn on LEDs");
+    uart_send_line("  '0' - Turn off all LEDs");
+    uart_send_line("  '4' - Erase EEPROM");
+    uart_send_line("  S1 - Start time measurement");
+    uart_send_line("  S2 - Get time measurement");
+    uart_send_line("=========================================\r\n");
+}
+
+int main(void)
+{
+    system_init();
 
     __enable_irq();
+    
+    adc_start();
+    print_banner();
+    example_memcpy();
 
     for (;;)
     {

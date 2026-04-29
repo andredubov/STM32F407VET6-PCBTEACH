@@ -21,7 +21,7 @@
 #define TIMEOUT_1s             1000
 #define TIMEOUT_3s             3000
 #define BUFFER_LENGTH             3
-#define BUFFER_LENGTH_32         32
+#define BUFFER_LENGTH_16         16
 #define BASE_ADDRESS       0x303030
 
 volatile static uint8_t eeprom_offset = 0;
@@ -29,6 +29,11 @@ static uint8_t buffer[AT24C02_SIZE];
 
 static volatile led_id_t current_led = NONE;
 static volatile led_id_t previous_led = NONE;
+
+char src_buffer[BUFFER_LENGTH_16] = {"USART-DMA OK!\r\n"};
+char dst_buffer[BUFFER_LENGTH_16];
+
+// __attribute__ ((section(".data")))
 
 void save_pressed_button_into_eeprom(led_id_t led_id)
 {
@@ -178,12 +183,9 @@ void get_time_measurement(void)
     }
 }
 
-__attribute__ ((section(".data"))) char src_buffer[BUFFER_LENGTH_32] = {"USART-DMA OK!\r\n"};
-__attribute__ ((section(".data"))) char dst_buffer[BUFFER_LENGTH_32];
-
 void copy_buffer_using_dma()
 {
-    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst_buffer, src_buffer, BUFFER_LENGTH_32);
+    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst_buffer, src_buffer, BUFFER_LENGTH_16);
     if (dma_error != DMA_OK) {
         uart_printf_line("❌ DMA memcpy failed to start: error %d", dma_error);
         return;
@@ -195,7 +197,7 @@ void copy_buffer_using_dma()
         return;
     }
 
-    if (memcmp(src_buffer, dst_buffer, BUFFER_LENGTH_32) != 0) {
+    if (memcmp(src_buffer, dst_buffer, BUFFER_LENGTH_16) != 0) {
         uart_send_line("❌ DMA memcpy verification failed");
         return;
     }
@@ -220,6 +222,4 @@ void send_buffer_into_uart_using_dma(void)
         uart_printf_line("❌ DMA wait failed: error %d", dma_error);
         return;
     }
-
-    uart_send_line("✓ DMA uart sending successful!");
 }

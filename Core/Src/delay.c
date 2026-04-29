@@ -5,6 +5,7 @@
 #include "critical_section.h"
 
 #define READING_LEDS_STATE_TIME_MS              1000
+#define DMA_UART_DATA_TRANSFER_TIME_MS          1000
 #define RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS     100
 
 volatile uint32_t system_tick = 1;
@@ -15,13 +16,11 @@ void SysTick_Handler(void)
     uint32_t basepri = critical_enter_basp(); // SysTick - самый высокий приоритет, используем BASEPRI
 
     static uint8_t debounce_counter = 0;
-    static uint16_t reading_leds_state_counter = 0;
-    static uint16_t reading_leds_ids_from_w25q64_counter = 0;
+    static uint16_t dma_uart_data_transfer_couneter = 0;
 
     system_tick++;
     debounce_counter++;
-    reading_leds_state_counter++;
-    reading_leds_ids_from_w25q64_counter++;
+    dma_uart_data_transfer_couneter++;
 
     // Вызываем обработчик кнопок каждые DEBOUNCE_TIME_MS (10 мс)
     if (debounce_counter >= DEBOUNCE_TIME_MS) {
@@ -29,15 +28,9 @@ void SysTick_Handler(void)
         buttons_debounce_handler();
     }
 
-    // Вызываем обработчик каждые READING_LEDS_STATE_TIME_MS (1 с)
-    if (reading_leds_state_counter >= READING_LEDS_STATE_TIME_MS) {
-        reading_leds_state_counter = 0;
-        event_id = RUNNING_LEDS_FROM_AT24C02_EVENT;
-    }
-
-    if (reading_leds_ids_from_w25q64_counter >= RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS) {
-        reading_leds_ids_from_w25q64_counter = 0;
-        event_id = RUNNING_LEDS_FROM_W25Q64_EVENT;
+    if (dma_uart_data_transfer_couneter >= DMA_UART_DATA_TRANSFER_TIME_MS) {
+        dma_uart_data_transfer_couneter = 0;
+        event_id = START_DMA_UART_DATA_TRANSFER_EVENT;
     }
 
     critical_exit_basp(basepri);

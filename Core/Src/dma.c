@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#define DEBUG_MODE            0
+
 // Максимальное количество потоков (Stream) в DMA2
 #define DMA2_MAX_STREAMS      8
 
@@ -236,25 +238,33 @@ dma_error_t dma_set_config(dma2_stream_t stream, const dma_config_t *config)
         cr |= ((uint32_t) config->channel << DMA_SxCR_CHSEL_Pos);
     }
 
-    // Настройка FIFO
-    // Direct Mode (прямой режим)
-    // dma_stream->FCR |= DMA_SxFCR_DMDIS;  // DMDIS = 1
-
-    // FIFO Mode (буферизированный режим)  
-    dma_stream->FCR &= ~DMA_SxFCR_DMDIS; // DMDIS = 0
-
+    // Настройка FIFO для UART
+    switch (config->mode) {
+        case DMA_MODE_MEM_TO_PERIPH:
+        case DMA_MODE_PERIPH_TO_MEM:
+            dma_stream->FCR |= DMA_SxFCR_DMDIS;
+            break;
+        case DMA_MODE_MEM_TO_MEM:
+            dma_stream->FCR &= ~DMA_SxFCR_DMDIS;
+            break;
+        default:            
+            break;
+    }
+            
     dma_stream->CR = cr;
 
     critical_exit_basp(basepri);
 
     stream_initialized[stream] = true;
 
-    uart_printf_line("DMA stream %d configured: mode=%d, data_size=%d, priority=%d",
-        stream, 
-        config->mode, 
-        config->data_size, 
-        config->priority
-    );
+    if (DEBUG_MODE) {
+        uart_printf_line("DMA stream %d configured: mode=%d, data_size=%d, priority=%d",
+            stream, 
+            config->mode, 
+            config->data_size, 
+            config->priority
+        );
+    }
     
     return DMA_OK;
 }
@@ -294,12 +304,14 @@ dma_error_t dma_start(dma2_stream_t stream,
 
     critical_exit_basp(basepri);
 
-    uart_printf_line("DMA stream %d started: count=%lu, periph_addr=0x%08lX, mem_addr=0x%08lX",
-        stream, 
-        data_count, 
-        peripheral_addr,
-        memory_addr
-    );
+    if (DEBUG_MODE) {
+        uart_printf_line("DMA stream %d started: count=%lu, periph_addr=0x%08lX, mem_addr=0x%08lX",
+            stream, 
+            data_count, 
+            peripheral_addr,
+            memory_addr
+        );
+    }
 
     return DMA_OK;
 }
@@ -334,7 +346,9 @@ dma_error_t dma_stop(dma2_stream_t stream)
         return DMA_ERROR_TIMEOUT;
     }
     
-    uart_printf_line("DMA stream %d stopped", stream);
+    if (DEBUG_MODE) {
+        uart_printf_line("DMA stream %d stopped", stream);
+    }
     
     return DMA_OK;
 }

@@ -43,10 +43,19 @@ int main(void)
     adc_start();
     print_banner();
     copy_buffer_using_dma();
-    send_buffer_into_uart_using_dma();
-
+    
     for (;;)
     {
+        event_id_t event_id = get_event_id();
+
+        switch (event_id) {
+            case START_DMA_UART_DATA_TRANSFER_EVENT:
+                send_buffer_into_uart_using_dma();
+                break;
+            default:
+                break;
+        }
+
         button_event_t button_event_id = get_button_event();
 
         switch (button_event_id) {

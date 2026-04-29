@@ -8,6 +8,7 @@
 typedef enum {
     RUNNING_LEDS_FROM_AT24C02_EVENT = 1,
     RUNNING_LEDS_FROM_W25Q64_EVENT = 2,
+    START_DMA_UART_DATA_TRANSFER_EVENT = 3,
 } event_id_t;
 
 event_id_t get_event_id(void);

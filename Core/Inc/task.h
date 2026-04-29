@@ -16,6 +16,7 @@ void switch_on_led();
 void start_time_measurement(void);
 void get_time_measurement(void);
 
-void example_memcpy(void);
+void copy_buffer_using_dma(void);
+void send_buffer_into_uart_using_dma(void);
 
 #endif // TASK_H

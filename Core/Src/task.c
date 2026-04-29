@@ -18,7 +18,10 @@
 #define SAVE_POINT_CNT            5
 #define TIMEOUT_250ms           250
 #define TIMEOUT_100ms           100
+#define TIMEOUT_1s             1000
+#define TIMEOUT_3s             3000
 #define BUFFER_LENGTH             3
+#define BUFFER_LENGTH_32         32
 #define BASE_ADDRESS       0x303030
 
 volatile static uint8_t eeprom_offset = 0;
@@ -175,57 +178,48 @@ void get_time_measurement(void)
     }
 }
 
-enum {
-    BUFFER_LENGTH_1 = 8
-};
+__attribute__ ((section(".data"))) char src_buffer[BUFFER_LENGTH_32] = {"USART-DMA OK!\r\n"};
+__attribute__ ((section(".data"))) char dst_buffer[BUFFER_LENGTH_32];
 
-uint8_t src[BUFFER_LENGTH_1];//    __attribute__ ((section(".bss")));
-uint8_t dst[BUFFER_LENGTH_1];//    __attribute__ ((section(".bss")));
-
-
-// void example_memcpy_v2(void)
-// {
-//     // Заполняем исходный массив тестовыми данными
-//     for(int i = 0; i < BUFFER_LENGTH_1; i++) {
-//         src[i] = (uint8_t) i;
-//     }
-//     // Инициализируем DMA2
-//     DMA2_MemToMem_Init(src, dst, BUFFER_LENGTH_1);
-//     // Запускаем передачу
-//     DMA2_StartTransfer();
-//     // Ожидаем завершения (или работаем в прерывании)
-//     while(!DMA2_IsTransferComplete());
-
-//     if (memcmp(src, dst, BUFFER_LENGTH_1) != 0) {
-//         uart_send_line("❌ DMA memcpy verification failed");
-//         return;
-//     }
-
-//     uart_send_line("✓ DMA memcpy successful!");
-// }
-
-void example_memcpy(void) 
+void copy_buffer_using_dma()
 {
-    for (int i = 0; i < BUFFER_LENGTH_1; i++) {
-        src[i] = (uint8_t) i;
-    }
-
-    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst, src, BUFFER_LENGTH_1);
+    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst_buffer, src_buffer, BUFFER_LENGTH_32);
     if (dma_error != DMA_OK) {
         uart_printf_line("❌ DMA memcpy failed to start: error %d", dma_error);
         return;
     }
 
-    dma_error = dma_wait(DMA2_STREAM_0, 2000);
+    dma_error = dma_wait(DMA2_STREAM_0, TIMEOUT_1s);
     if (dma_error != DMA_OK) {
         uart_printf_line("❌ DMA wait failed: error %d", dma_error);
         return;
     }
 
-    if (memcmp(src, dst, BUFFER_LENGTH_1) != 0) {
+    if (memcmp(src_buffer, dst_buffer, BUFFER_LENGTH_32) != 0) {
         uart_send_line("❌ DMA memcpy verification failed");
         return;
     }
 
     uart_send_line("✓ DMA memcpy successful!");
+}
+
+void send_buffer_into_uart_using_dma(void)
+{
+    dma2_stream_t dma_stream = dma_get_stream(DMA2_PERIPH_USART1_TX);
+
+    uint32_t length = strlen(dst_buffer);
+
+    dma_error_t dma_error = dma_uart1_tx_init(dma_stream, dst_buffer, length);
+    if (dma_error != DMA_OK) {
+        uart_printf_line("❌ DMA send data by uart failed: error %d", dma_error);
+        return;
+    }
+
+    dma_error = dma_wait(dma_stream, TIMEOUT_3s);
+    if (dma_error != DMA_OK) {
+        uart_printf_line("❌ DMA wait failed: error %d", dma_error);
+        return;
+    }
+
+    uart_send_line("✓ DMA uart sending successful!");
 }

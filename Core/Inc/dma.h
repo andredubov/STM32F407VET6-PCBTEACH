@@ -104,7 +104,7 @@ typedef struct {
 
 // USART1
 #define DMA2_USART1_RX_MAPPING {DMA2_STREAM_5, DMA2_CHANNEL_4}
-#define DMA2_USART1_TX_MAPPING {DMA2_STREAM_3, DMA2_CHANNEL_4}
+#define DMA2_USART1_TX_MAPPING {DMA2_STREAM_7, DMA2_CHANNEL_4}
 
 // USART2
 #define DMA2_USART2_RX_MAPPING {DMA2_STREAM_6, DMA2_CHANNEL_4}
@@ -254,28 +254,28 @@ dma_error_t dma_memcpy(dma2_stream_t stream, void* dest, const void* src, uint32
 // Удобные функции для конкретной периферии
 // ============================================================================
 // SPI2
-dma_error_t dma_spi2_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_spi2_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
+dma_error_t dma_spi2_rx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
+dma_error_t dma_spi2_tx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
 
 // USART1
-dma_error_t dma_uart1_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart1_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
+dma_error_t dma_uart1_rx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart1_tx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
 
 // USART2
-dma_error_t dma_uart2_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart2_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
+dma_error_t dma_uart2_rx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart2_tx_init(dma2_stream_t stream, void *buffer, uint32_t buffer_size);
 
 // ADC1
-dma_error_t dma_adc1_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size);
+dma_error_t dma_adc1_init(dma2_stream_t stream, void* buffer_addr, uint32_t buffer_size);
 
 // Функции с автоматическим выбором потока (по маппингу)
-dma_error_t dma_adc1_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_spi2_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_spi2_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart1_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart1_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart2_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
-dma_error_t dma_uart2_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size);
+dma_error_t dma_adc1_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_spi2_rx_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_spi2_tx_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart1_rx_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart1_tx_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart2_rx_init_auto(void *buffer, uint32_t buffer_size);
+dma_error_t dma_uart2_tx_init_auto(void *buffer, uint32_t buffer_size);
 
 // void DMA2_MemToMem_Init(uint8_t *src, uint8_t *dst, uint32_t length);
 // // Функция запуска передачи

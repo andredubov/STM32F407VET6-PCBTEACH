@@ -42,7 +42,8 @@ int main(void)
     
     adc_start();
     print_banner();
-    example_memcpy();
+    copy_buffer_using_dma();
+    send_buffer_into_uart_using_dma();
 
     for (;;)
     {

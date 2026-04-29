@@ -52,13 +52,16 @@ void uart_init(void)
     USART1->CR1 &= ~(USART_CR1_M | USART_CR1_PCE);  // 8 бит, без контроля четности
     USART1->CR2 &= ~(USART_CR2_STOP);               // 1 стоповый бит
 
-    // 6. Включить передатчик и приемник
+    // 6. Включить DMA для передатчика USART1
+    USART1->CR3 |= USART_CR3_DMAT;
+
+    // 7. Включить передатчик и приемник
     USART1->CR1 |= USART_CR1_TE | USART_CR1_RE;     // Вкл. передатчик и приемник
 
-    // 7. Включить USART
+    // 8. Включить USART
     USART1->CR1 |= USART_CR1_UE;
 
-    // 8. Включить прерывания (если нужно)
+    // 9. Включить прерывания (если нужно)
     USART1->CR1 |= USART_CR1_RXNEIE;                // Прерывание по приему
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 0);

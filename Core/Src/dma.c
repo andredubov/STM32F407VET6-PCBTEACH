@@ -110,6 +110,9 @@ void dma_init(void)
         complete_callback[i] = NULL;
         half_callback[i] = NULL;
         error_callback[i] = NULL;
+
+        is_transfer_completed[i] = false;
+        is_transfer_failed[i] = false;
     }
     
     // Сбрасываем все флаги прерываний DMA2
@@ -217,29 +220,29 @@ dma_error_t dma_set_config(dma2_stream_t stream, const dma_config_t *config)
         cr |= DMA_SxCR_MINC;
     }
     
-    // Для Memory-to-memory режима
-    if (config->mode == DMA_MODE_MEM_TO_MEM) {
-        // cr |= DMA_SxCR_DBM;
-    }
-    
     // Настройка прерываний
-    // if (config->transfer_complete_interrupt) {
+    if (config->transfer_complete_interrupt) {
         cr |= DMA_SxCR_TCIE;
-    // }
-    // if (config->half_transfer_interrupt) {
+    }
+    if (config->half_transfer_interrupt) {
         cr |= DMA_SxCR_HTIE;
-    // }
-    // if (config->transfer_error_interrupt) {
+    }
+    if (config->transfer_error_interrupt) {
         cr |= DMA_SxCR_TEIE;
-    // }
+    }
     
     // Настройка канала (для периферийных операций)
     if (config->mode != DMA_MODE_MEM_TO_MEM) {
-        cr |= ((uint32_t)config->channel << DMA_SxCR_CHSEL_Pos);
+        cr |= ((uint32_t) config->channel << DMA_SxCR_CHSEL_Pos);
     }
 
     // Настройка FIFO
-    // dma_stream->FCR = DMA_SxFCR_DMDIS;
+    // Direct Mode (прямой режим)
+    // dma_stream->FCR |= DMA_SxFCR_DMDIS;  // DMDIS = 1
+
+    // FIFO Mode (буферизированный режим)  
+    dma_stream->FCR &= ~DMA_SxFCR_DMDIS; // DMDIS = 0
+
     dma_stream->CR = cr;
 
     critical_exit_basp(basepri);
@@ -291,7 +294,7 @@ dma_error_t dma_start(dma2_stream_t stream,
 
     critical_exit_basp(basepri);
 
-    uart_printf_line("DMA stream %d started: count=%lu, periph=0x%08lX, mem=0x%08lX",
+    uart_printf_line("DMA stream %d started: count=%lu, periph_addr=0x%08lX, mem_addr=0x%08lX",
         stream, 
         data_count, 
         peripheral_addr,
@@ -347,7 +350,12 @@ bool dma_is_busy(dma2_stream_t stream)
         return false;
     }
 
-    return !dma_is_stream_completed(stream) && !dma_is_stream_failed(stream);
+    // bool r1 = dma_is_stream_completed(stream);
+    // bool r2 = dma_is_stream_failed(stream);
+    // bool r3 = !r1 && !r2; 
+
+    // return r3;
+    return (dma_stream->CR & DMA_SxCR_EN);
 }
 
 bool dma_is_stream_completed(dma2_stream_t stream)
@@ -480,61 +488,41 @@ dma_error_t dma_memcpy(dma2_stream_t stream, void* dest, const void* src, uint32
             .memory_increment = true
         },
         .transfer_complete_interrupt = true,
-        .half_transfer_interrupt = true,
+        .half_transfer_interrupt = false,
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_0
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)src, (uint32_t)dest, size_bytes);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream, 
+        (uint32_t)src, 
+        (uint32_t)dest, 
+        size_bytes
+    );
+    
+    return dma_error;
 }
 
-// ============================================================================
-// Удобные функции для периферии
-// ============================================================================
-
-// static dma_error_t dma_periph_init(dma2_periph_t periph, 
-//     dma_mode_t mode,
-//     uint32_t buffer_addr, 
-//     uint32_t buffer_size,
-//     bool circular, 
-//     dma_priority_t priority)
-// {
-//     dma2_mapping_t mapping = dma_get_mapping(periph);
-//     if (mapping.stream >= DMA2_MAX_STREAMS) {
-//         return DMA_ERROR_PARAM;
-//     }
-    
-//     dma_config_t config = {
-//         .mode = mode,
-//         .data_size = DMA_DATA_SIZE_BYTE,
-//         .priority = priority,
-//         .circular_mode = circular ? DMA_CIRCULAR_ENABLED : DMA_CIRCULAR_DISABLED,
-//         .increment = {
-//             .peripheral_increment = false,
-//             .memory_increment = true
-//         },
-//         .transfer_complete_interrupt = true,
-//         .half_transfer_interrupt = circular ? true : false,
-//         .transfer_error_interrupt = true,
-//         .channel = mapping.channel
-//     };
-    
-//     dma_error_t error = dma_config(mapping.stream, &config);
-//     if (error != DMA_OK) {
-//         return error;
-//     }
-    
-//     return DMA_OK;
-// }
-
 // SPI2
-dma_error_t dma_spi2_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_spi2_rx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
 {
+    if (stream != DMA2_STREAM_3) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
     dma_config_t config = {
         .mode = DMA_MODE_PERIPH_TO_MEM,
         .data_size = DMA_DATA_SIZE_BYTE,
@@ -549,17 +537,36 @@ dma_error_t dma_spi2_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_0
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)&SPI2->DR, buffer_addr, buffer_size);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream,
+        (uint32_t)&SPI2->DR, 
+        (uint32_t)buffer_addr, 
+        buffer_size
+    );
+
+    return dma_error;
 }
 
-dma_error_t dma_spi2_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_spi2_tx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
 {
+    if (stream != DMA2_STREAM_4) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
     dma_config_t config = {
         .mode = DMA_MODE_MEM_TO_PERIPH,
         .data_size = DMA_DATA_SIZE_BYTE,
@@ -574,18 +581,37 @@ dma_error_t dma_spi2_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_0
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)&SPI2->DR, buffer_addr, buffer_size);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+    
+    dma_error = dma_start(stream, 
+        (uint32_t)&SPI2->DR, 
+        (uint32_t)buffer_addr, 
+        buffer_size
+    );
+
+    return dma_error;
 }
 
 // USART1
-dma_error_t dma_uart1_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_uart1_rx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
 {
+    if (stream != DMA2_STREAM_5) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
     dma_config_t config = {
         .mode = DMA_MODE_PERIPH_TO_MEM,
         .data_size = DMA_DATA_SIZE_BYTE,
@@ -600,21 +626,45 @@ dma_error_t dma_uart1_rx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_4
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)&USART1->DR, buffer_addr, buffer_size);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream, 
+        (uint32_t)&USART1->DR, 
+        (uint32_t) buffer_addr, 
+        buffer_size
+    );
+    
+    return dma_error;
 }
 
-dma_error_t dma_uart1_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size)
-{
+dma_error_t dma_uart1_tx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
+{    
+    // Убеждаемся, что USART1 включён и DMAT установлен
+    if (!(USART1->CR3 & USART_CR3_DMAT)) {
+        return DMA_ERROR_TRANSFER;  // DMA для UART не включён
+    }
+
+    if (stream != DMA2_STREAM_7) {
+        return DMA_ERROR_PARAM;
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
     dma_config_t config = {
         .mode = DMA_MODE_MEM_TO_PERIPH,
         .data_size = DMA_DATA_SIZE_BYTE,
-        .priority = DMA_PRIORITY_MEDIUM,
+        .priority = DMA_PRIORITY_HIGH,
         .circular_mode = DMA_CIRCULAR_DISABLED,
         .increment = {
             .peripheral_increment = false,
@@ -625,18 +675,126 @@ dma_error_t dma_uart1_tx_init(dma2_stream_t stream, uint32_t buffer_addr, uint32
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_4
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)&USART1->DR, buffer_addr, buffer_size);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream, 
+        (uint32_t)&USART1->DR,
+        (uint32_t) buffer_addr,
+        buffer_size
+    );
+    
+    return dma_error;
+}
+
+// USART2
+dma_error_t dma_uart2_rx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
+{
+    if (stream != DMA2_STREAM_6) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
+    dma_config_t config = {
+        .mode = DMA_MODE_PERIPH_TO_MEM,
+        .data_size = DMA_DATA_SIZE_BYTE,
+        .priority = DMA_PRIORITY_MEDIUM,
+        .circular_mode = DMA_CIRCULAR_ENABLED,
+        .increment = {
+            .peripheral_increment = false,
+            .memory_increment = true
+        },
+        .transfer_complete_interrupt = true,
+        .half_transfer_interrupt = true,
+        .transfer_error_interrupt = true,
+        .channel = DMA2_CHANNEL_4
+    };
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+    
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream, 
+        (uint32_t)&USART1->DR, 
+        (uint32_t) buffer_addr, 
+        buffer_size
+    );
+    
+    return dma_error;
+}
+
+dma_error_t dma_uart2_tx_init(dma2_stream_t stream, void *buffer_addr, uint32_t buffer_size)
+{
+    if (stream != DMA2_STREAM_4) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
+    dma_config_t config = {
+        .mode = DMA_MODE_MEM_TO_PERIPH,
+        .data_size = DMA_DATA_SIZE_BYTE,
+        .priority = DMA_PRIORITY_MEDIUM,
+        .circular_mode = DMA_CIRCULAR_DISABLED,
+        .increment = {
+            .peripheral_increment = false,
+            .memory_increment = true
+        },
+        .transfer_complete_interrupt = false,
+        .half_transfer_interrupt = false,
+        .transfer_error_interrupt = false,
+        .channel = DMA2_CHANNEL_4
+    };
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+    
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+
+    dma_error = dma_start(stream, 
+        (uint32_t)&USART1->DR,
+        (uint32_t)buffer_addr,
+        buffer_size
+    );
+    
+    return dma_error;
 }
 
 // ADC1
-dma_error_t dma_adc1_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_adc1_init(dma2_stream_t stream, void* buffer_addr, uint32_t buffer_size)
 {
+    if (stream != DMA2_STREAM_0) {
+        return DMA_ERROR_PARAM;  // Mem-to-Mem только на Stream 0
+    }
+
+    if (NULL == buffer_addr || 0 == buffer_size) {
+        return DMA_ERROR_PARAM;
+    }
+
     dma_config_t config = {
         .mode = DMA_MODE_PERIPH_TO_MEM,
         .data_size = DMA_DATA_SIZE_HALF_WORD,
@@ -651,50 +809,61 @@ dma_error_t dma_adc1_init(dma2_stream_t stream, uint32_t buffer_addr, uint32_t b
         .transfer_error_interrupt = true,
         .channel = DMA2_CHANNEL_0
     };
-    
-    dma_error_t error = dma_set_config(stream, &config);
-    if (error != DMA_OK) {
-        return error;
+
+    dma_error_t dma_error = dma_stop(stream);
+    if (dma_error != DMA_OK) {
+        return dma_error;
     }
     
-    return dma_start(stream, (uint32_t)&ADC1->DR, buffer_addr, buffer_size);
+    dma_error = dma_set_config(stream, &config);
+    if (dma_error != DMA_OK) {
+        return dma_error;
+    }
+    
+    dma_error = dma_start(stream, 
+        (uint32_t)&ADC1->DR, 
+        (uint32_t)buffer_addr, 
+        buffer_size
+    );
+
+    return dma_error;
 }
 
 // ============================================================================
 // Функции с автоматическим выбором потока
 // ============================================================================
 
-dma_error_t dma_spi2_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_spi2_rx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
     return dma_spi2_rx_init(dma_get_stream(DMA2_PERIPH_SPI2_RX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_spi2_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_spi2_tx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
     return dma_spi2_tx_init(dma_get_stream(DMA2_PERIPH_SPI2_TX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_uart1_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_uart1_rx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
     return dma_uart1_rx_init(dma_get_stream(DMA2_PERIPH_USART1_RX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_uart1_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_uart1_tx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
     return dma_uart1_tx_init(dma_get_stream(DMA2_PERIPH_USART1_TX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_uart2_rx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_uart2_rx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
-    return dma_uart1_rx_init(dma_get_stream(DMA2_PERIPH_USART2_RX), buffer_addr, buffer_size);
+    return dma_uart2_rx_init(dma_get_stream(DMA2_PERIPH_USART2_RX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_uart2_tx_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_uart2_tx_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
-    return dma_uart1_tx_init(dma_get_stream(DMA2_PERIPH_USART2_TX), buffer_addr, buffer_size);
+    return dma_uart2_tx_init(dma_get_stream(DMA2_PERIPH_USART2_TX), buffer_addr, buffer_size);
 }
 
-dma_error_t dma_adc1_init_auto(uint32_t buffer_addr, uint32_t buffer_size)
+dma_error_t dma_adc1_init_auto(void* buffer_addr, uint32_t buffer_size)
 {
     return dma_adc1_init(dma_get_stream(DMA2_PERIPH_ADC1), buffer_addr, buffer_size);
 }
@@ -722,6 +891,7 @@ void DMA2_Stream0_IRQHandler(void)
     
     if (flags & DMA_LISR_HTIF0) {
         DMA2->LIFCR = DMA_LIFCR_CHTIF0;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -759,6 +929,7 @@ void DMA2_Stream1_IRQHandler(void)
     
     if (flags & DMA_LISR_HTIF1) {
         DMA2->LIFCR = DMA_LIFCR_CHTIF1;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -796,6 +967,7 @@ void DMA2_Stream2_IRQHandler(void)
     
     if (flags & DMA_LISR_HTIF2) {
         DMA2->LIFCR = DMA_LIFCR_CHTIF2;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -833,6 +1005,7 @@ void DMA2_Stream3_IRQHandler(void)
     
     if (flags & DMA_LISR_HTIF3) {
         DMA2->LIFCR = DMA_LIFCR_CHTIF3;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -870,6 +1043,7 @@ void DMA2_Stream4_IRQHandler(void)
     
     if (flags & DMA_HIFCR_CHTIF4) {
         DMA2->HIFCR = DMA_HIFCR_CHTIF4;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -907,6 +1081,7 @@ void DMA2_Stream5_IRQHandler(void)
     
     if (flags & DMA_HIFCR_CHTIF5) {
         DMA2->HIFCR = DMA_HIFCR_CHTIF5;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -944,6 +1119,7 @@ void DMA2_Stream6_IRQHandler(void)
 
     if (flags & DMA_HIFCR_CHTIF6) {
         DMA2->HIFCR = DMA_HIFCR_CHTIF6;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }
@@ -981,6 +1157,7 @@ void DMA2_Stream7_IRQHandler(void)
     
     if (flags & DMA_HIFCR_CHTIF7) {
         DMA2->HIFCR = DMA_HIFCR_CHTIF7;
+
         if (half_callback[dma_stream_id]) {
             half_callback[dma_stream_id]();
         }

@@ -46,6 +46,8 @@ void led_toggle(led_id_t led_id)
         case LED_3:
             GPIOE->ODR ^= (1 << LED_3);
             break;
+        default:
+            break;
     }
 }
 
@@ -61,6 +63,8 @@ void led_on(led_id_t led_id)
         case LED_3:
             GPIOE->BSRR |= GPIO_BSRR_BR15;
             break;
+        default:
+            break;
     }
 }
 
@@ -75,6 +79,8 @@ void led_off(led_id_t led_id)
             break;
         case LED_3:
             GPIOE->BSRR |= GPIO_BSRR_BS15;
+            break;
+        default:
             break;
     }
 }

@@ -6,7 +6,7 @@
 // Константы для демпфирования
 #define DEBOUNCE_COUNTER_MAX 5      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
 
-volatile button_event_t button_event = NONE;
+volatile button_event_t button_event = BUTTON_NONE;
 volatile button_debounce_t button_debounce = {0};
 volatile uint8_t button_raw_state[3] = {0};  // сырое состояние из прерывания
 
@@ -14,7 +14,7 @@ button_event_t get_button_event(void)
 {
     CRITICAL_SECTION_START();
     button_event_t event = button_event;
-    button_event = NONE; // Сбрасываем событие после чтения
+    button_event = BUTTON_NONE; // Сбрасываем событие после чтения
     CRITICAL_SECTION_END();
 
     return event;
@@ -130,6 +130,6 @@ void buttons_init(void)
         button_debounce.button_pressed_flag[i] = 0;
         button_raw_state[i] = 0;
     }
-    button_event = NONE;
+    button_event = BUTTON_NONE;
     CRITICAL_SECTION_END();
 }

@@ -277,13 +277,4 @@ dma_error_t dma_uart1_tx_init_auto(void *buffer, uint32_t buffer_size);
 dma_error_t dma_uart2_rx_init_auto(void *buffer, uint32_t buffer_size);
 dma_error_t dma_uart2_tx_init_auto(void *buffer, uint32_t buffer_size);
 
-// void DMA2_MemToMem_Init(uint8_t *src, uint8_t *dst, uint32_t length);
-// // Функция запуска передачи
-// void DMA2_StartTransfer(void);
-// // Функция проверки завершения передачи
-// bool DMA2_IsTransferComplete(void);
-// // Обработчик прерывания DMA2 Stream0
-// void DMA2_Stream0_IRQHandler(void);
-
-
 #endif // DMA_H

@@ -1,10 +1,10 @@
+#include <stddef.h>
+#include <string.h>
 #include "stm32f407xx.h"
 #include "dma.h"
 #include "delay.h"
 #include "uart.h"
 #include "critical_section.h"
-#include <stddef.h>
-#include <string.h>
 
 #define DEBUG_MODE            0
 

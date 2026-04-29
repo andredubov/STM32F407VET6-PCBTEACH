@@ -9,7 +9,7 @@
 #define RUNNING_LEDS_IDS_FROM_W25Q64_TIME_MS     100
 
 volatile uint32_t system_tick = 1;
-volatile static event_id_t event_id = NONE;
+volatile static event_id_t event_id = EVENT_NONE;
 
 void SysTick_Handler(void)
 {
@@ -54,7 +54,7 @@ event_id_t get_event_id(void)
     
     CRITICAL_SECTION_START();
     event = event_id;
-    event_id = NONE;
+    event_id = EVENT_NONE;
     CRITICAL_SECTION_END();
     
     return event;

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 typedef enum {
+    LED_NONE = 0,
     LED_1 = 15,
     LED_2 = 14,
     LED_3 = 13

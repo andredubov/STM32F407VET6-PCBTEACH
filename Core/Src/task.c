@@ -27,13 +27,11 @@
 volatile static uint8_t eeprom_offset = 0;
 static uint8_t buffer[AT24C02_SIZE];
 
-static volatile led_id_t current_led = NONE;
-static volatile led_id_t previous_led = NONE;
+static volatile led_id_t current_led = LED_NONE;
+static volatile led_id_t previous_led = LED_NONE;
 
 char src_buffer[BUFFER_LENGTH_16] = {"USART-DMA OK!\r\n"};
 char dst_buffer[BUFFER_LENGTH_16];
-
-// __attribute__ ((section(".data")))
 
 void save_pressed_button_into_eeprom(led_id_t led_id)
 {
@@ -157,7 +155,7 @@ void load_led_id_from_eeprom(led_id_t led_id)
     current_led = (led_id_t) value;
 }
 
-void switch_on_led()
+void switch_on_led(void)
 {
     led_off(previous_led);
     led_on(current_led);
@@ -183,7 +181,7 @@ void get_time_measurement(void)
     }
 }
 
-void copy_buffer_using_dma()
+void copy_buffer_using_dma(void)
 {
     dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst_buffer, src_buffer, BUFFER_LENGTH_16);
     if (dma_error != DMA_OK) {

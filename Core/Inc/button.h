@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 typedef enum {
-    NONE = 0,
+    BUTTON_NONE = 0,
     BUTTON_1_PRESSED,
     BUTTON_2_PRESSED,
     BUTTON_3_PRESSED,

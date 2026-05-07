@@ -7,7 +7,8 @@ typedef enum {
     LED_NONE = 0,
     LED_1 = 15,
     LED_2 = 14,
-    LED_3 = 13
+    LED_3 = 13,
+    LED_MAX = 3
 } led_id_t;
 
 void leds_init(void);

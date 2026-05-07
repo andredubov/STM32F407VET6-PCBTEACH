@@ -41,9 +41,9 @@ uint32_t get_tick_ms(void)
     uint32_t tick;
     
     // Защищаем чтение 32-битной переменной (атомарность не гарантирована)
-    CRITICAL_SECTION_START();
+    // CRITICAL_SECTION_START();
     tick = system_tick;
-    CRITICAL_SECTION_END();
+    // CRITICAL_SECTION_END();
     
     return tick;
 }

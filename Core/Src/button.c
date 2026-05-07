@@ -7,7 +7,8 @@
 #define DEBOUNCE_COUNTER_MAX 5      // количество проверок для подтверждения состояния (при вызове обработчика каждые 50 мс = 50 мс)
 
 volatile button_event_t button_event = BUTTON_NONE;
-volatile button_debounce_t button_debounce = {0};
+volatile button_debounce_t button_pressed_debounce = {0};
+volatile button_debounce_t button_released_debounce = {0};
 volatile uint8_t button_raw_state[3] = {0};  // сырое состояние из прерывания
 
 button_event_t get_button_event(void)
@@ -50,37 +51,68 @@ void EXTI15_10_IRQHandler(void)
 // Обработчик демпфирования - вызывать периодически (например, каждые 10 мс из таймера)
 void buttons_debounce_handler(void)
 {
-    CRITICAL_SECTION_START();
-
-    for (int i = 0; i < 3; i++) {
-        // Проверяем сырое состояние из прерывания
-        if (button_raw_state[i]) {
-            if (button_debounce.debounce_counter[i] < DEBOUNCE_COUNTER_MAX) {
-                button_debounce.debounce_counter[i]++;
-                if (button_debounce.debounce_counter[i] >= DEBOUNCE_COUNTER_MAX) {
-                    // Подтверждено нажатие
-                    if (!button_debounce.button_state[i]) {
-                        button_debounce.button_state[i] = 1;
-                        button_debounce.button_pressed_flag[i] = 1;
-                        // Генерируем событие
+    uint32_t basepri = critical_enter_basp();
+    
+    for (int i = 0; i < 3; i++) 
+    {
+        // Текущее сырое состояние кнопки (нажата = 1, отпущена = 0)
+        uint8_t raw = button_raw_state[i];
+        
+        // === ОБРАБОТКА НАЖАТИЯ ===
+        if (raw) {
+            if (button_pressed_debounce.debounce_counter[i] < DEBOUNCE_COUNTER_MAX) {
+                button_pressed_debounce.debounce_counter[i]++;
+                
+                if (button_pressed_debounce.debounce_counter[i] >= DEBOUNCE_COUNTER_MAX) {
+                    // Дребезг прошел - состояние стабилизировалось
+                    if (!button_pressed_debounce.button_state[i]) {
+                        // Кнопка была отпущена, а теперь нажата
+                        button_pressed_debounce.button_state[i] = 1;
+                        
+                        // Генерируем событие НАЖАТИЯ
                         switch (i) {
-                            case 0: button_event = BUTTON_1_PRESSED; break;
-                            case 1: button_event = BUTTON_2_PRESSED; break;
-                            case 2: button_event = BUTTON_3_PRESSED; break;
-                            default:
-                                break;
+                            case 0: button_event = BUTTON_S1_PRESSED; break;
+                            case 1: button_event = BUTTON_S2_PRESSED; break;
+                            case 2: button_event = BUTTON_S3_PRESSED; break;
                         }
                     }
                 }
             }
         } else {
-            // Кнопка не активна (отпущена)
-            button_debounce.debounce_counter[i] = 0;
-            button_debounce.button_state[i] = 0;
+            // === ОБРАБОТКА ОТПУСКАНИЯ ===
+            if (button_released_debounce.debounce_counter[i] < DEBOUNCE_COUNTER_MAX) {
+                button_released_debounce.debounce_counter[i]++;
+                
+                if (button_released_debounce.debounce_counter[i] >= DEBOUNCE_COUNTER_MAX) {
+                    // Дребезг прошел - состояние стабилизировалось
+                    if (button_pressed_debounce.button_state[i]) {
+                        // Кнопка была нажата, а теперь отпущена
+                        button_pressed_debounce.button_state[i] = 0;
+                        
+                        // Генерируем событие ОТПУСКАНИЯ
+                        switch (i) {
+                            case 0: button_event = BUTTON_S1_RELEASED; break;
+                            case 1: button_event = BUTTON_S2_RELEASED; break;
+                            case 2: button_event = BUTTON_S3_RELEASED; break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Сброс счетчиков при изменении сырого состояния
+        // Если кнопка нажата, но был дребезг (raw=0), сбрасываем счетчик нажатия
+        if (!raw && button_pressed_debounce.debounce_counter[i] > 0) {
+            button_pressed_debounce.debounce_counter[i] = 0;
+        }
+        
+        // Если кнопка отпущена, но был дребезг (raw=1), сбрасываем счетчик отпускания
+        if (raw && button_released_debounce.debounce_counter[i] > 0) {
+            button_released_debounce.debounce_counter[i] = 0;
         }
     }
-
-    CRITICAL_SECTION_END();
+    
+    critical_exit_basp(basepri);
 }
 
 void buttons_init(void)
@@ -125,9 +157,14 @@ void buttons_init(void)
     CRITICAL_SECTION_START();
     // 9. Инициализация структур демпфирования
     for (int i = 0; i < 3; i++) {
-        button_debounce.debounce_counter[i] = 0;
-        button_debounce.button_state[i] = 0;
-        button_debounce.button_pressed_flag[i] = 0;
+        button_pressed_debounce.debounce_counter[i] = 0;
+        button_pressed_debounce.button_state[i] = 0;
+        button_pressed_debounce.button_pressed_flag[i] = 0;
+
+        button_released_debounce.debounce_counter[i] = 0;
+        button_released_debounce.button_state[i] = 0;
+        button_released_debounce.button_pressed_flag[i] = 0;
+
         button_raw_state[i] = 0;
     }
     button_event = BUTTON_NONE;

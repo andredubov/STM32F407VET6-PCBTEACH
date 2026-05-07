@@ -1,223 +1,122 @@
 #include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
-#include "stm32f407xx.h"
-#include "at24c02.h"
 #include "button.h"
-#include "w25q64.h"
-#include "delay.h"
+#include "stm32f407xx.h"
 #include "led.h"
 #include "uart.h"
 #include "task.h"
-#include "spi.h"
-#include "timer_capture.h"
-#include "adc.h"
-#include "dma.h"
+#include "can.h"
 
-#define EEPROM_BASE_ADDRESS       0
-#define SAVE_POINT_CNT            5
-#define TIMEOUT_250ms           250
-#define TIMEOUT_100ms           100
-#define TIMEOUT_1s             1000
-#define TIMEOUT_3s             3000
-#define BUFFER_LENGTH             3
-#define BUFFER_LENGTH_16         16
-#define BASE_ADDRESS       0x303030
+#define FRAME_ID_1  0x234
+#define FRAME_ID_2  0x432
 
-volatile static uint8_t eeprom_offset = 0;
-static uint8_t buffer[AT24C02_SIZE];
+// Структура для хранения состояния кнопок (для Remote Frame)
+static volatile uint8_t last_button_states[3] = {0, 0, 0};
 
-static volatile led_id_t current_led = LED_NONE;
-static volatile led_id_t previous_led = LED_NONE;
-
-char src_buffer[BUFFER_LENGTH_16] = {"USART-DMA OK!\r\n"};
-char dst_buffer[BUFFER_LENGTH_16];
-
-void save_pressed_button_into_eeprom(led_id_t led_id)
+void save_button_event(button_event_t button_event_id)
 {
-    bool ok = at24c02_write_byte(EEPROM_BASE_ADDRESS+eeprom_offset, led_id);
-    if (!ok) {
-        uart_send_line("Failed to write from EEPROM");
-        return;
+    switch(button_event_id) {
+        case BUTTON_S1_PRESSED:
+            last_button_states[0] = 1;
+            break;
+        case BUTTON_S2_PRESSED:
+            last_button_states[1] = 1;
+            break;
+        case BUTTON_S3_PRESSED:
+            last_button_states[2] = 1;
+            break;
+        case BUTTON_S1_RELEASED:
+            last_button_states[0] = 0;
+            break;
+        case BUTTON_S2_RELEASED:
+            last_button_states[1] = 0;
+            break;
+        case BUTTON_S3_RELEASED:
+            last_button_states[2] = 0;
+            break;
+        default:
+            break;
     }
-
-    eeprom_offset = (eeprom_offset + 1) % SAVE_POINT_CNT;
 }
 
-void runnig_leds_from_eeprom(void)
+void send_button_state(void)
 {
-    bool ok = at24c02_read_buffer(EEPROM_BASE_ADDRESS, buffer, SAVE_POINT_CNT);
-    if (!ok) {
-        uart_send_line("Failed to read from EEPROM");
-        return;
-    }
+    can_message_t message;
+    can_error_t error;
+    
+    message.id = FRAME_ID_2;
+    message.dlc = 3;
+    message.is_remote = false;
+    message.is_extended = false;
 
-    for (uint8_t i = 0; i < SAVE_POINT_CNT; ++i)
+    // Формируем данные: каждый байт содержит номер нажатой кнопки
+    // Формат: [кнопка1, кнопка2, кнопка3]
+    // Если кнопка не нажата - 0x00, иначе - номер кнопки (1, 2 или 3)
+    message.data[0] = last_button_states[0] ? 0x01 : 0x00;
+    message.data[1] = last_button_states[1] ? 0x02 : 0x00;
+    message.data[2] = last_button_states[2] ? 0x03 : 0x00;
+    
+    uart_printf_line("Sending button state: [0x%02X, 0x%02X, 0x%02X]", 
+        message.data[0],
+        message.data[1],
+        message.data[2]
+    );
+
+    // Отправляем сообщение с ID = 0x432
+    error = can_2_transmit_msg(message);
+    
+    if (error != CAN_OK) {
+        uart_printf_line("Failed to send button state: %s", can_2_error_to_string(error));
+    } else {
+        uart_send_line("Button state sent successfully");
+    }
+}
+
+static void switch_on_leds(can_message_t can_message)
+{
+    if (can_message.dlc > 0) 
     {
-        if (buffer[i] != 0xFF)
-        {
-            if (buffer[i] >= LED_1 && buffer[i] <= LED_3) 
-            {
-                led_id_t led_id = (led_id_t) buffer[i];    
+        for (uint8_t i = 0; i < LED_MAX; ++i) {
+            uint8_t bit_mask = (1 << i);
+            led_id_t led_id = LED_1 - i;
+
+            if (can_message.data[0] & bit_mask) {
                 led_on(led_id);
-                delay_ms(TIMEOUT_250ms);
+            } else {
                 led_off(led_id);
-                delay_ms(TIMEOUT_250ms);
             }
         }
     }
 }
 
-void clear_eeprom(void)
+void can_receive_message(void)
 {
-    at24c02_erase_all();
-    eeprom_offset = 0;
-}
+    can_error_t error;
+    can_message_t message;
 
-void save_led_id_into_eeprom(led_id_t led_id)
-{
-    w25q64_error_t w25q64_error;
-    uint32_t target_address = BASE_ADDRESS;
-
-    spi_disable();
-    spi_set_8bit_mode();
-    spi_enable();
-
-    switch (led_id) {
-        case LED_1:;
-            target_address = BASE_ADDRESS + 0;
-            break;
-        case LED_2:
-            target_address = BASE_ADDRESS + 1;
-            break;
-        case LED_3:
-            target_address = BASE_ADDRESS + 2;
-            break;
-        default:
-            target_address = BASE_ADDRESS;
-            break;
+    error = can_2_receive_msg(&message);
+    if (error != CAN_OK) {
+        return;
     }
 
-    w25q64_error = w25q64_update_data(target_address, &led_id, 1);
-    if (w25q64_error != W25Q_OK) {
-        uart_printf_line("cannot read byte at 0x%06X", target_address);
-    }
-}
-
-void save_leds_ids_into_eeprom(led_id_t led_1_id, led_id_t led_2_id, led_id_t led_3_id)
-{
-    w25q64_error_t w25q64_error;
-    uint32_t target_address = BASE_ADDRESS;
-    uint16_t data;
-
-    data = (uint16_t)(led_2_id << 8);
-    data |= led_3_id;
-
-    w25q64_error = w25q64_erase_sector_4KB(target_address);
-    if (w25q64_error != W25Q_OK) {
-        uart_printf_line("cannot erase byte at 0x%06X", target_address);
-    }
-
-    w25q64_error = w25q64_write_with_mode_switch(target_address, led_1_id, data);
-    if (w25q64_error != W25Q_OK) {
-        uart_printf_line("cannot write data with SPI mode switch at 0x%06X", target_address);
-    }
-}
-
-void load_led_id_from_eeprom(led_id_t led_id)
-{
-    w25q64_error_t w25q64_error;
-    uint32_t target_address = BASE_ADDRESS;
-
-    switch (led_id) {
-        case LED_1:
-            target_address = BASE_ADDRESS + 0;
-            break;
-        case LED_2:
-            target_address = BASE_ADDRESS + 1;
-            break;
-        case LED_3:
-            target_address = BASE_ADDRESS + 2;
-            break;
-        default:
-            target_address = BASE_ADDRESS;
-            break;
-    }
-
-    uint8_t value;
-
-    w25q64_error = w25q64_read_byte(target_address, &value);
-    if (w25q64_error != W25Q_OK) {
-        uart_printf_line("cannot read byte at 0x%06X", target_address);
-    }
-
-    previous_led = current_led;
-    current_led = (led_id_t) value;
-}
-
-void switch_on_led(void)
-{
-    led_off(previous_led);
-    led_on(current_led);
-}
-
-void start_time_measurement(void)
-{
-    reset_time_measurement();  // Сброс предыдущего измерения
-    uart_printf_line("\n✅ Measurement started: press S2 again to measure interval");
-}
-
-void get_time_measurement(void)
-{
-    bool is_completed = is_time_measurement_completed();
-    
-    if (is_completed) {
-        // Выводим результат измерения
-        uint32_t interval_ms = get_interval_ms();
-        float interval_seconds = get_interval_seconds();
-        uart_printf_line("📊 Interval: %u мс (%.3f с)", interval_ms, interval_seconds);
+    if (message.is_remote) {
+        // Это Remote Frame - запрос от ПК
+        switch(message.id) {
+            case FRAME_ID_2:
+                send_button_state(); // Отправляем состояние кнопок в ответ
+                break;
+            default:
+                uart_printf_line("Unknown Remote Frame ID: 0x%03X", message.id);            
+                break;
+        }
     } else {
-        uart_send_line("⚠️ Measurement already done, ignoring");
-    }
-}
-
-void copy_buffer_using_dma(void)
-{
-    dma_error_t dma_error = dma_memcpy(DMA2_STREAM_0, dst_buffer, src_buffer, BUFFER_LENGTH_16);
-    if (dma_error != DMA_OK) {
-        uart_printf_line("❌ DMA memcpy failed to start: error %d", dma_error);
-        return;
-    }
-
-    dma_error = dma_wait(DMA2_STREAM_0, TIMEOUT_1s);
-    if (dma_error != DMA_OK) {
-        uart_printf_line("❌ DMA wait failed: error %d", dma_error);
-        return;
-    }
-
-    if (memcmp(src_buffer, dst_buffer, BUFFER_LENGTH_16) != 0) {
-        uart_send_line("❌ DMA memcpy verification failed");
-        return;
-    }
-
-    uart_send_line("✓ DMA memcpy successful!");
-}
-
-void send_buffer_into_uart_using_dma(void)
-{
-    dma2_stream_t dma_stream = dma_get_stream(DMA2_PERIPH_USART1_TX);
-
-    uint32_t length = strlen(dst_buffer);
-
-    dma_error_t dma_error = dma_uart1_tx_init(dma_stream, dst_buffer, length);
-    if (dma_error != DMA_OK) {
-        uart_printf_line("❌ DMA send data by uart failed: error %d", dma_error);
-        return;
-    }
-
-    dma_error = dma_wait(dma_stream, TIMEOUT_3s);
-    if (dma_error != DMA_OK) {
-        uart_printf_line("❌ DMA wait failed: error %d", dma_error);
-        return;
+        switch(message.id) {
+            case FRAME_ID_1:
+                switch_on_leds(message); // зажигаем соответствующие светодиоды
+                break;
+            default:
+                uart_printf_line("Unknown Data Frame ID: 0x%03X", message.id);            
+                break;
+        }
     }
 }

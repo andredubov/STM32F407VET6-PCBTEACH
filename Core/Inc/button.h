@@ -7,10 +7,19 @@
 
 typedef enum {
     BUTTON_NONE = 0,
-    BUTTON_1_PRESSED,
-    BUTTON_2_PRESSED,
-    BUTTON_3_PRESSED,
+    BUTTON_S1_PRESSED,
+    BUTTON_S2_PRESSED,
+    BUTTON_S3_PRESSED,
+    BUTTON_S1_RELEASED,
+    BUTTON_S2_RELEASED,
+    BUTTON_S3_RELEASED,
 } button_event_t;
+
+typedef enum {
+    BUTTON_S1 = 1,
+    BUTTON_S2,
+    BUTTON_S3,
+} button_id_t;
 
 typedef struct {
     uint8_t debounce_counter[3];

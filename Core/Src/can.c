@@ -4,9 +4,11 @@
 #include "uart.h"
 #include "delay.h"
 
-#define FRAME_1_ID     0x234
-#define FRAME_2_ID     0x432
-#define CAN_TIMEOUT_MS  1000
+#define FRAME_1_ID          0x234
+#define FRAME_2_ID          0x432
+#define CAN_FILTER_RTR  (1u << 4)
+#define CAN_FILTER_IDE  (1u << 3)
+#define CAN_TIMEOUT_MS       1000
 
 void can_2_init(void)
 {
@@ -90,10 +92,10 @@ void can_2_init(void)
 
     // ID для фильтров (сдвиг на 5 бит)
     CAN1->sFilterRegister[14].FR1 = (FRAME_1_ID << 5);
-    CAN1->sFilterRegister[14].FR2 = 0;
+    CAN1->sFilterRegister[14].FR2 = ((uint32_t)((FRAME_1_ID << 5) | CAN_FILTER_RTR) & 0xFFFF);
 
     CAN1->sFilterRegister[15].FR1 = (FRAME_2_ID << 5);
-    CAN1->sFilterRegister[15].FR2 = 0;
+    CAN1->sFilterRegister[15].FR2 = ((uint32_t)((FRAME_2_ID << 5) | CAN_FILTER_RTR) & 0xFFFF);
 
     // Активация фильтров
     CAN1->FA1R |= (1 << 14) | (1 << 15);
@@ -250,10 +252,6 @@ can_error_t can_2_receive_msg(can_message_t *message)
         message->is_remote,
         message->is_extended
     );
-    
-    if (message->is_remote) {
-        uart_send_line("  -> This is a REMOTE FRAME!");
-    }
 
     // Освобождение FIFO
     CAN2->RF0R |= CAN_RF0R_RFOM0;
